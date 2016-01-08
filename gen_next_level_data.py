@@ -84,10 +84,10 @@ def get_model(
 
 
 def main(*args, **kwargs):
-    data = load_data()
     if len(args) != 2:
         raise Exception('Please provide function id')
-    go_id  = args[1]
+    go_id = args[1]
+    data = load_data(go_id)
     model = get_model(go_id)
     paacs = list()
     for prot_id, paac in data:
