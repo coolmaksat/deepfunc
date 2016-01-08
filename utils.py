@@ -149,3 +149,11 @@ def normalize_aa(prop):
     for key, value in prop.iteritems():
         res[key] = (value - aap_mean) / aap_std
     return res
+
+
+def get_model_max_features(size):
+    if size == 12567208:
+        return 10000
+    if size == 32567208:
+        return 60000
+    return 5000
