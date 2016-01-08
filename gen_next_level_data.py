@@ -31,12 +31,12 @@ def load_data(go_id):
     with open(DATA_ROOT + 'level_1/' + go_id + '.txt') as f:
         for line in f:
             line = line.strip().split()
-        if line[0] == '1':
-            prot_id = line[1]
-            paac = list()
-            for v in line[2:]:
-                paac.append(float(v))
-            data.append((prot_id, paac))
+            if line[0] == '1':
+                prot_id = line[1]
+                paac = list()
+                for v in line[2:]:
+                    paac.append(float(v))
+                data.append((prot_id, paac))
     return data
 
 
@@ -95,7 +95,7 @@ def main(*args, **kwargs):
     pred = model.predict_classes(
         numpy.array(paacs, dtype="float32"),
         batch_size=1,
-        verbose=0)
+        verbose=1)
     result = list()
     for i in range(len(data)):
         if pred[i] == 1:
