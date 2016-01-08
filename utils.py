@@ -1,4 +1,5 @@
 import numpy
+import math
 
 
 def train_val_test_split(labels, data, split=0.8, batch_size=16):
@@ -28,6 +29,30 @@ def train_val_test_split(labels, data, split=0.8, batch_size=16):
     test = (test_labels, test_data)
 
     return (train, val, test)
+
+
+def train_test_split(labels, data, split=0.8, batch_size=16):
+    """This function is used to split the labels and data
+    Input:
+        labels - array of labels
+        data - array of data
+        split - percentage of the split, default=0.8\
+    Return:
+        Three tuples with labels and data
+        (train_labels, train_data), (test_labels, test_data)
+    """
+    n = len(labels)
+    train_n = int((n * split) / batch_size) * batch_size
+
+    train_data = data[:train_n]
+    train_labels = labels[:train_n]
+    train = (train_labels, train_data)
+
+    test_data = data[train_n:]
+    test_labels = labels[train_n:]
+    test = (test_labels, test_data)
+
+    return (train, test)
 
 
 def shuffle(*args, **kwargs):
@@ -81,3 +106,46 @@ def get_gene_ontology():
                 go[g_id]['children'] = list()
             go[g_id]['children'].append(go_id)
     return go
+
+
+def mean(a):
+    """
+    The mean value of the list data.
+    Usage:
+        result = mean(array)
+    """
+    return sum(a)/len(a)
+
+
+def std(a, ddof=0):
+    """
+    The standard deviation of the list data.
+    Usage:
+        result = std(array)
+    """
+    m = mean(a)
+    temp = [math.pow(i-m, 2) for i in a]
+    res = math.sqrt(sum(temp) / (len(a) - ddof))
+    return res
+
+
+def normalize_aa(prop):
+    """
+    All of the amino acid indices are centralized and
+    standardized before the calculation.
+    Usage:
+        result = normalize_aap(aap)
+    Input: aap is a dict form containing the properties of 20 amino acids.
+    Output: result is the a dict form containing the normalized properties
+    of 20 amino acids.
+    """
+
+    if len(prop) != 20:
+        raise Exception('Invalid number of Amino acids!')
+
+    res = dict()
+    aap_mean = mean(prop.values())
+    aap_std = std(prop.values())
+    for key, value in prop.iteritems():
+        res[key] = (value - aap_mean) / aap_std
+    return res

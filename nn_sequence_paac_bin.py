@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 '''
-THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python nn_sequence.py
+THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python nn_sequence_paac.py
 '''
 
 import numpy
@@ -13,8 +13,11 @@ from keras.layers.embeddings import Embedding
 from keras.optimizers import SGD
 from sklearn.metrics import classification_report
 from keras.utils import np_utils
+from utils import train_val_test_split
+import sys
 
 LAMBDA = 24
+DATA_ROOT = 'data/molecular_functions/hierarchical/level_1/paac/'
 
 
 def shuffle(*args, **kwargs):
@@ -30,56 +33,45 @@ def shuffle(*args, **kwargs):
         numpy.random.shuffle(arg)
 
 
-def load_data():
+def load_data(go_id):
     data = list()
     labels = list()
-    pos = 0
+    pos = 1
     positive = list()
     negative = list()
-    with open('data/obtained/go_multi_paac_l.txt') as f:
+    ln = 0
+    with open(DATA_ROOT + go_id + '.txt') as f:
         for line in f:
             line = line.strip().split(' ')
             label = int(line[0])
             paac = list()
-            for i in range(1, len(line)):
+            for i in range(2, len(line)):
                 paac.append(float(line[i]))
+            if len(paac) != 20 + 2 * LAMBDA:
+                print 'Bad data in line %d' % ln
+                continue
             if label == pos:
                 positive.append(paac)
             else:
                 negative.append(paac)
+            ln += 1
     shuffle(negative, seed=10)
     n = len(positive)
     data = negative[:n] + positive
     labels = [0.0] * n + [1.0] * n
+    # Previous was 30
     shuffle(data, labels, seed=30)
-    return numpy.array(data), numpy.array(labels, dtype="float32")
+    return numpy.array(labels), numpy.array(data, dtype="float32")
 
 
-def split_train_and_validation(split, data, labels):
-
-    train_nu = int(len(labels) * split)
-    val_nu = (len(labels) - train_nu) / 2
-    train_data = data[:train_nu]
-    train_label = labels[:train_nu]
-
-    val_data = data[train_nu:][0:val_nu]
-    val_label = labels[train_nu:][0:val_nu]
-
-    test_data = data[train_nu:][val_nu:]
-    test_label = labels[train_nu:][val_nu:]
-
-    return train_data, train_label, val_data, val_label, test_data, test_label
-
-
-def model(
-        train_data, train_label, val_data, val_label, test_data, test_label):
+def model(labels, data, go_id):
     # set parameters:
     max_features = 10000
-    batch_size = 32
+    batch_size = 256
     embedding_dims = 100
     nb_filters = 250
     hidden_dims = 250
-    nb_epoch = 24
+    nb_epoch = 12
 
     # pool lengths
     pool_length = 2
@@ -88,6 +80,13 @@ def model(
 
     # length of APAAC
     maxlen = 20 + 2 * LAMBDA
+
+    train, val, test = train_val_test_split(
+        labels, data, batch_size=batch_size)
+    train_label, train_data = train
+
+    val_label, val_data = val
+    test_label, test_data = test
 
     test_label_rep = test_label
 
@@ -117,17 +116,34 @@ def model(
         batch_size=batch_size, nb_epoch=nb_epoch,
         show_accuracy=True, verbose=1,
         validation_data=(val_data, val_label), sample_weight=weights_train)
+    # # Loading saved weights
+    # print 'Loading weights'
+    # model.load_weights(DATA_ROOT + go_id + '.hdf5')
     score = model.evaluate(
         test_data, test_label,
         batch_size=batch_size, verbose=1, show_accuracy=True)
     print "Loss:", score[0], "Accuracy:", score[1]
     pred_data = model.predict_classes(test_data, batch_size=batch_size)
-    print(classification_report(list(test_label_rep), pred_data))
+    # Saving the model
+    print 'Saving the model for ' + go_id
+    model.save_weights(DATA_ROOT + go_id + '.hdf5', overwrite=True)
+    return classification_report(list(test_label_rep), pred_data)
 
+
+def print_report(report, go_id):
+    with open(DATA_ROOT + 'reports.txt', 'a') as f:
+        f.write('Classification report for ' + go_id + '\n')
+        f.write(report + '\n')
+
+
+def main(*args, **kwargs):
+    if len(args) != 2:
+        sys.exit('Please provide GO Id')
+    go_id = args[1]
+    print 'Starting binary classification for ' + go_id
+    labels, data = load_data(go_id)
+    report = model(labels, data, go_id)
+    print_report(report, go_id)
 
 if __name__ == '__main__':
-    data, labels = load_data()
-    split = 0.8
-    data_train, labels_train, data_val, labels_val, data_test, labels_test = split_train_and_validation(split, data, labels)
-    model(
-        data_train, labels_train, data_val, labels_val, data_test, labels_test)
+    main(*sys.argv)

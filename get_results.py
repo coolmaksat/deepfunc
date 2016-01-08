@@ -9,7 +9,7 @@ DATA_ROOT = 'data/molecular_functions/'
 RESULT_ROOT = 'data/molecular_functions/paac'
 FILES = (
     'unseen-gos.txt',
-    'predictions-old.txt')
+    'predictions.txt')
 
 go = get_gene_ontology()
 

@@ -457,7 +457,7 @@ def get_apseudo_aac(protein_sequence, lamda=30, weight=0.5):
 
 def load_data():
     data = list()
-    with open('data/molecular_functions/uniprot-go-mol-func.txt') as f:
+    with open('data/uniprot-swiss-mol-func.txt') as f:
         for line in f:
             line = line.strip().split('\t')
             prot_id = line[0]
@@ -502,21 +502,21 @@ def test():
 
 def main(*args, **kwargs):
 
-    paac_dict = load_data_paac()
+    # paac_dict = load_data_paac()
     data = load_data()
     print 'Data has been loaded!'
     with open(
-            'data/molecular_functions/uniprot-go-mol-func-paac.txt',
+            'data/uniprot-swiss-mol-func-paac.txt',
             'w', 1073741824) as f:
         for prot_id, seq in data:
             f.write(prot_id)
-            if prot_id in paac_dict:
-                for paac in paac_dict[prot_id]:
-                    f.write(' ' + paac)
-            else:
-                paac = get_apseudo_aac(seq, lamda=24)
-                for p in paac:
-                    f.write(' ' + str(p))
+            # if prot_id in paac_dict:
+            #     for paac in paac_dict[prot_id]:
+            #         f.write(' ' + paac)
+            # else:
+            paac = get_apseudo_aac(seq, lamda=24)
+            for p in paac:
+                f.write(' ' + str(p))
             f.write('\n')
     # test()
 

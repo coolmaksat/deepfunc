@@ -1,6 +1,6 @@
 #!/bin/bash
-FILES="data/molecular_functions/paac/GO:00[1-9]*.txt"
-ROOT="data/molecular_functions/paac/"
+FILES="data/swiss/level_1/GO:00*.txt"
+ROOT="data/swiss/level_1/"
 
 for f in $FILES; do
     bname=$(basename "$f")

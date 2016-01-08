@@ -5,14 +5,16 @@ import time
 from utils import shuffle, get_gene_ontology
 
 
-DATA_ROOT = 'data/molecular_functions/'
-RESULT_ROOT = 'data/molecular_functions/hierarchical/level_1/'
+DATA_ROOT = 'data/swiss/'
+RESULT_ROOT = 'data/swiss/level_1/'
 FILES = (
-    'mol-func-train.txt',)
+    'train.txt',)
 
 go = get_gene_ontology()
 
 go_prot = None
+go_seq = None
+MIN_LEN = 24
 
 
 def get_go_set(go_id):
@@ -40,14 +42,50 @@ def get_subtree_set(go_id):
     return go_set
 
 
+INVALID_ACIDS = set(['U', 'O', 'B', 'Z', 'J', 'X'])
+
+
+def isOk(seq):
+    for c in seq:
+        if c in INVALID_ACIDS:
+            return False
+    return True
+
+
+def get_paac_by_prot_id():
+    data = dict()
+    with open(DATA_ROOT + 'uniprot-swiss-mol-func-paac.txt') as f:
+        for line in f:
+            line = line.strip().split()
+            paac = line[1]
+            for i in range(2, len(line)):
+                paac += ' ' + line[i]
+            data[line[0]] = paac
+
+    return data
+
+prot_paac = get_paac_by_prot_id()
+
+
 def load_all_proteins():
     data = list()
+    global go_seq
+    go_seq = dict()
+    max_len = 0
+    sum_len = 0
     for i in range(len(FILES)):
         file_name = FILES[i]
         with open(DATA_ROOT + file_name, 'r') as f:
             for line in f:
                 line = line.strip().split('\t')
+                if len(line[1]) < MIN_LEN:
+                    continue
+                if max_len < len(line[1]):
+                    max_len = len(line[1])
+                sum_len += len(line[1])
                 prot_id = line[0]
+                seq = line[1]
+                go_seq[prot_id] = seq
                 go_set = set()
                 for go_id in line[2].split('; '):
                     if go_id in go:
@@ -86,9 +124,9 @@ def select_proteins(go_id, parent_go_set):
     min_len = min(len(positives), len(negatives))
     with open(RESULT_ROOT + go_id + '.txt', 'w') as f:
         for prot_id in negatives[:min_len]:
-            f.write('0 ' + prot_id + '\n')
+            f.write('0 ' + prot_id + ' ' + prot_paac[prot_id] + '\n')
         for prot_id in positives[:min_len]:
-            f.write('1 ' + prot_id + '\n')
+            f.write('1 ' + prot_id + ' ' + prot_paac[prot_id] + '\n')
     print 'Finished selection for ' + go_id
     # for ch_id in node['children']:
     #     select_proteins(ch_id, pos_go_set)
@@ -109,8 +147,8 @@ def main():
         print ch_id
         select_proteins(ch_id, root_go_set)
 
-    end_time = time.time() - start_time
-    print 'Done in %d seconds' % (end_time, )
+    # end_time = time.time() - start_time
+    # print 'Done in %d seconds' % (end_time, )
 
 if __name__ == '__main__':
     main()

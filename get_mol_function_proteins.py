@@ -5,9 +5,9 @@ from collections import deque
 import time
 
 
-DATA_ROOT = 'data/molecular_functions/'
+DATA_ROOT = 'data/'
 FILES = (
-    'uniprot-go.txt',)
+    'uniprot-swiss.txt',)
 INVALID_ACIDS = set(['U', 'O', 'B', 'Z', 'J', 'X'])
 
 
@@ -76,8 +76,7 @@ def main():
     for i in range(len(FILES)):
         file_name = FILES[i]
         with open(DATA_ROOT + file_name, 'r') as f:
-            next(f)
-            with open(DATA_ROOT + 'uniprot-go-mol-func.txt', 'w') as fall:
+            with open(DATA_ROOT + 'uniprot-swiss-mol-func.txt', 'w') as fall:
                 for line in f:
                     line = line.strip().split('\t')
                     prot_id = line[0]

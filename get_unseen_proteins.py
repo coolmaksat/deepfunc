@@ -6,9 +6,9 @@ import time
 from utils import shuffle, get_gene_ontology
 
 
-DATA_ROOT = 'data/molecular_functions/'
+DATA_ROOT = 'data/swiss/'
 FILES = (
-    'uniprot-go-mol-func.txt',)
+    'uniprot-swiss-mol-func.txt',)
 
 
 def load_all_proteins_paac():
@@ -24,6 +24,19 @@ def load_all_proteins_paac():
     return prots
 
 
+INVALID_ACIDS = set(['U', 'O', 'B', 'Z', 'J', 'X'])
+MIN_LEN = 24
+
+
+def is_ok(seq):
+    if len(seq) < MIN_LEN:
+        return False
+    for c in seq:
+        if c in INVALID_ACIDS:
+            return False
+    return True
+
+
 def load_all_proteins():
     prots = list()
     for i in range(len(FILES)):
@@ -34,7 +47,8 @@ def load_all_proteins():
                 prot_id = line[0]
                 seq = line[1]
                 gos = line[2]
-                prots.append((prot_id, seq, gos))
+                if is_ok(seq):
+                    prots.append((prot_id, seq, gos))
     return prots
 
 
@@ -71,10 +85,10 @@ def main():
     # all_set = set(all_prots.keys())
     # print len(all_set), len(train_set)
     # unseen = all_set - train_set
-    with open(DATA_ROOT + 'mol-func-train.txt', 'w') as f:
+    with open(DATA_ROOT + 'train.txt', 'w') as f:
         for prot_id, seq, gos in all_prots[:train_len]:
             f.write(prot_id + '\t' + seq + '\t' + gos + '\n')
-    with open(DATA_ROOT + 'mol-func-test.txt', 'w') as f:
+    with open(DATA_ROOT + 'test.txt', 'w') as f:
         for prot_id, seq, gos in all_prots[train_len:]:
             f.write(prot_id + '\t' + seq + '\t' + gos + '\n')
 
