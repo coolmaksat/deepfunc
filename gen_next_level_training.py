@@ -96,7 +96,12 @@ def main(*args, **kwargs):
         negatives = negatives[:n]
         with open(DATA_ROOT + 'level_2/' + go_id + '/' + ch_id + '.txt', 'w') as f:
             for prot_id in negatives:
-                f.write(prot_id)
+                f.write('0 ' + prot_id)
+                for p in paacs[prot_id]:
+                    f.write(' ' + str(p))
+                f.write('\n')
+            for prot_id in positives:
+                f.write('1 ' + prot_id)
                 for p in paacs[prot_id]:
                     f.write(' ' + str(p))
                 f.write('\n')
