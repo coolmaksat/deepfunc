@@ -82,8 +82,8 @@ def main(*args, **kwargs):
             if prot_id not in paacs:
                 continue
             pos = False
-            for go_id in gos:
-                if go_id in ch_set:
+            for g_id in gos:
+                if g_id in ch_set:
                     pos = True
                     break
             if pos:
