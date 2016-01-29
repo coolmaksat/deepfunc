@@ -20,7 +20,7 @@ import os
 from collections import deque
 
 LAMBDA = 24
-DATA_ROOT = 'data/swiss2/'
+DATA_ROOT = 'data/recurrent/'
 
 go = get_gene_ontology()
 go_model = dict()
