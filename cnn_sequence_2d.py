@@ -16,9 +16,9 @@ Clarendon Press Oxford (1986).
 
 import numpy
 from keras.models import Sequential
-from keras.layers.core import Dense, Dropout, Activation
-from keras.layers.embeddings import Embedding
-from keras.layers.recurrent import LSTM, GRU
+from keras.layers.core import Dense, Dropout, Activation, Flatten
+from keras.layers.convolutional import Convolution2D, MaxPooling2D
+from keras.layers.recurrent import LSTM
 from keras.preprocessing import sequence
 from sklearn.metrics import classification_report
 from keras.utils import np_utils
@@ -68,6 +68,9 @@ PI = {
 HYDROPHILICITY = normalize_aa(HYDROPHILICITY)
 HYDROPHOBICITY = normalize_aa(HYDROPHOBICITY)
 RESIDUEMASS = normalize_aa(RESIDUEMASS)
+PK1 = normalize_aa(PK1)
+PK2 = normalize_aa(PK2)
+PI = normalize_aa(PI)
 
 LAMBDA = 24
 DATA_ROOT = 'data/recurrent/level_1/'
@@ -92,52 +95,64 @@ def load_data(go_id):
     pos = 1
     positive = list()
     negative = list()
-    ln = 0
     with open(DATA_ROOT + go_id + '.txt') as f:
         for line in f:
             line = line.strip().split(' ')
             label = int(line[0])
             seq = []
-            for x in line[2]:
-                seq.append(ord(x) - ord('A'))
+            for x in line[2][:500]:
+                acid = [
+                    HYDROPHOBICITY[x],
+                    HYDROPHILICITY[x],
+                    RESIDUEMASS[x],
+                    PK1[x], PK2[x], PI[x]]
+                seq.append(acid)
+            while len(seq) < 500:
+                seq.append([0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
             if label == pos:
                 positive.append(seq)
             else:
                 negative.append(seq)
-            ln += 1
     shuffle(negative, seed=10)
     n = len(positive)
     data = negative[:n] + positive
     labels = [0.0] * n + [1.0] * n
     # Previous was 30
     shuffle(data, labels, seed=30)
-    maxlen = 500
-    data = sequence.pad_sequences(data, maxlen=maxlen)
     return numpy.array(labels), numpy.array(data, dtype="float32")
 
 
 def model(labels, data, go_id):
     # set parameters:
-    max_features = 5000
     batch_size = 16
     nb_epoch = 12
-    maxlen = 500
     train, val, test = train_val_test_split(
         labels, data, batch_size=batch_size)
     train_label, train_data = train
 
     val_label, val_data = val
     test_label, test_data = test
-
+    train_data = train_data.reshape(train_data.shape[0], 1, 500, 6)
+    test_data = test_data.reshape(test_data.shape[0], 1, 500, 6)
+    val_data = val_data.reshape(val_data.shape[0], 1, 500, 6)
     test_label_rep = test_label
 
     model = Sequential()
-    model.add(Embedding(
-        max_features, 8, mask_zero=True))
-    model.add(LSTM(8, 8))
+
+    model.add(Convolution2D(32, 1, 3, 1, border_mode='full'))
+    model.add(Activation('relu'))
+    model.add(Convolution2D(32, 32, 3, 1))
+    model.add(Activation('relu'))
+    model.add(MaxPooling2D(poolsize=(2, 1)))
+    model.add(Dropout(0.25))
+
+    model.add(Flatten())
+    model.add(Dense(48000, 128))
+    model.add(Activation('relu'))
     model.add(Dropout(0.5))
-    model.add(Dense(8, 1))
-    model.add(Activation('sigmoid'))
+
+    model.add(Dense(128, 1))
+    model.add(Activation('softmax'))
 
     model.compile(
         loss='binary_crossentropy', optimizer='adam', class_mode='binary')

@@ -5,8 +5,8 @@ import time
 from utils import shuffle, get_gene_ontology
 
 
-DATA_ROOT = 'data/swiss/'
-RESULT_ROOT = 'data/swiss/level_1/'
+DATA_ROOT = 'data/swiss2/'
+RESULT_ROOT = 'data/swiss2/level_1/'
 FILES = (
     'train.txt',)
 

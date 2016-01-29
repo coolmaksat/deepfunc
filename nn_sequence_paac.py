@@ -17,7 +17,7 @@ from utils import train_val_test_split
 import sys
 
 LAMBDA = 24
-DATA_ROOT = 'data/swiss/level_1/'
+DATA_ROOT = 'data/swiss2/level_1/'
 
 
 def shuffle(*args, **kwargs):
@@ -47,7 +47,7 @@ def load_data(go_id):
             paac = list()
             for i in range(2, len(line)):
                 paac.append(float(line[i]))
-            if len(paac) != 20 + 2 * LAMBDA:
+            if len(paac) != 20 + 6 * LAMBDA:
                 print 'Bad data in line %d' % ln
                 continue
             if label == pos:
@@ -79,7 +79,7 @@ def model(labels, data, go_id):
     filter_length = 3
 
     # length of APAAC
-    maxlen = 20 + 2 * LAMBDA
+    maxlen = 20 + 6 * LAMBDA
 
     train, val, test = train_val_test_split(
         labels, data, batch_size=batch_size)

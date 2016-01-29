@@ -6,7 +6,8 @@ import time
 from utils import shuffle, get_gene_ontology
 
 
-DATA_ROOT = 'data/swiss/'
+DATA_ROOT = 'data/'
+RESULT_ROOT = 'data/swiss2/'
 FILES = (
     'uniprot-swiss-mol-func.txt',)
 
@@ -85,10 +86,10 @@ def main():
     # all_set = set(all_prots.keys())
     # print len(all_set), len(train_set)
     # unseen = all_set - train_set
-    with open(DATA_ROOT + 'train.txt', 'w') as f:
+    with open(RESULT_ROOT + 'train.txt', 'w') as f:
         for prot_id, seq, gos in all_prots[:train_len]:
             f.write(prot_id + '\t' + seq + '\t' + gos + '\n')
-    with open(DATA_ROOT + 'test.txt', 'w') as f:
+    with open(RESULT_ROOT + 'test.txt', 'w') as f:
         for prot_id, seq, gos in all_prots[train_len:]:
             f.write(prot_id + '\t' + seq + '\t' + gos + '\n')
 

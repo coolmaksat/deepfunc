@@ -163,8 +163,9 @@ def get_correlation_function(norm_aap, ri, rj):
         raise Exception('No amino acid properties provided!')
     theta = 0.0
     for i in range(len(norm_aap)):
-        theta += math.pow(norm_aap[i][ri] - norm_aap[i][rj], 2)
-    theta = round((theta) / len(norm_aap), 3)
+        temp = norm_aap[i][ri] - norm_aap[i][rj]
+        theta += temp * temp
+    theta = theta / len(norm_aap)
     return theta
 
 
@@ -204,8 +205,7 @@ def get_aa_composition(protein_sequence):
     sequence_length = len(protein_sequence)
     result = {}
     for i in AALETTER:
-        result[i] = round(
-            float(protein_sequence.count(i)) / sequence_length * 100, 3)
+        result[i] = float(protein_sequence.count(i)) / sequence_length * 100
     return result
 
 
@@ -293,12 +293,17 @@ def get_pseudo_aac(
 
 NORM_HYDROPHOBICITY = normalize_aap(HYDROPHOBICITY)
 NORM_HYDROPHILICITY = normalize_aap(HYDROPHILICITY)
+NORM_RESIDUEMASS = normalize_aap(HYDROPHILICITY)
+NORM_PK1 = normalize_aap(PK1)
+NORM_PK2 = normalize_aap(PK2)
+NORM_PI = normalize_aap(PI)
+
 APAAC_CORRELATION = dict()
 
 
 def get_correlation_function_apaac(ri, rj):
     """
-    Computing the correlation between two given amino acids using the above two
+    Computing the correlation between two given amino acids using the above six
     properties for APAAC (type II PseAAC).
     Usage:
         result = get_correlation_function_for_apaac(ri, rj)
@@ -311,18 +316,20 @@ def get_correlation_function_apaac(ri, rj):
         return APAAC_CORRELATION[ri][rj]
     if rj in APAAC_CORRELATION and ri in APAAC_CORRELATION[rj]:
         return APAAC_CORRELATION[rj][ri]
-    hydrophobicity = NORM_HYDROPHOBICITY
-    hydrophilicity = NORM_HYDROPHILICITY
-    theta1 = round(hydrophobicity[ri] * hydrophobicity[rj], 3)
-    theta2 = round(hydrophilicity[ri] * hydrophilicity[rj], 3)
+    theta1 = NORM_HYDROPHOBICITY[ri] * NORM_HYDROPHOBICITY[rj]
+    theta2 = NORM_HYDROPHILICITY[ri] * NORM_HYDROPHILICITY[rj]
+    theta3 = NORM_RESIDUEMASS[ri] * NORM_RESIDUEMASS[rj]
+    theta4 = NORM_PK1[ri] * NORM_PK1[rj]
+    theta5 = NORM_PK2[ri] * NORM_PK2[rj]
+    theta6 = NORM_PI[ri] * NORM_PI[rj]
     if ri not in APAAC_CORRELATION:
         APAAC_CORRELATION[ri] = dict()
         APAAC_CORRELATION[ri][rj] = dict()
     if rj not in APAAC_CORRELATION:
         APAAC_CORRELATION[rj] = dict()
         APAAC_CORRELATION[rj][ri] = dict()
-    APAAC_CORRELATION[ri][rj] = (theta1, theta2)
-    APAAC_CORRELATION[rj][ri] = (theta1, theta2)
+    APAAC_CORRELATION[ri][rj] = (theta1, theta2, theta3, theta4, theta5, theta6)
+    APAAC_CORRELATION[rj][ri] = (theta1, theta2, theta3, theta4, theta5, theta6)
     return APAAC_CORRELATION[ri][rj]
 
 
@@ -342,59 +349,31 @@ def get_sequence_order_correlation_factor_apaac(protein_sequence, k=1):
     sequence_length = len(protein_sequence)
     hydrophobicity = []
     hydrophilicity = []
+    residuemass = []
+    pk1 = []
+    pk2 = []
+    pi = []
     for i in range(sequence_length - k):
         aa1 = protein_sequence[i]
         aa2 = protein_sequence[i + k]
         temp = get_correlation_function_apaac(aa1, aa2)
         hydrophobicity.append(temp[0])
         hydrophilicity.append(temp[1])
+        residuemass.append(temp[2])
+        pk1.append(temp[3])
+        pk2.append(temp[4])
+        pi.append(temp[5])
     result = []
-    result.append(round(sum(hydrophobicity) / (sequence_length - k), 3))
-    result.append(round(sum(hydrophilicity) / (sequence_length - k), 3))
+    result.append(sum(hydrophobicity) / (sequence_length - k))
+    result.append(sum(hydrophilicity) / (sequence_length - k))
+    result.append(sum(residuemass) / (sequence_length - k))
+    result.append(sum(pk1) / (sequence_length - k))
+    result.append(sum(pk2) / (sequence_length - k))
+    result.append(sum(pi) / (sequence_length - k))
     return result
 
 
-def get_apseudo_aac1(protein_sequence, lamda=30, weight=0.5):
-    """
-    Computing the first 20 of type II pseudo-amino acid compostion descriptors
-    based on [HYDROPHOBICITY, HYDROPHILICITY].
-    """
-    rightpart = 0.0
-    for i in range(lamda):
-        rightpart += sum(
-            get_sequence_order_correlation_factor_apaac(
-                protein_sequence, k=i+1))
-    aac = get_aa_composition(protein_sequence)
-
-    result = list()
-    temp = 1 + weight * rightpart
-    for index, i in enumerate(AALETTER):
-        result.append(round(aac[i] / temp, 3))
-    return result
-
-
-def get_apseudo_aac2(protein_sequence, lamda=30, weight=0.5):
-    """
-    Computing the last lamda of type II pseudo-amino acid compostion
-    descriptors based on [HYDROPHOBICITY, HYDROPHILICITY].
-    """
-
-    rightpart = []
-    for i in range(lamda):
-        temp = get_sequence_order_correlation_factor_apaac(
-            protein_sequence, k=i+1)
-        rightpart.append(temp[0])
-        rightpart.append(temp[1])
-
-    result = list()
-    temp = 1 + weight * sum(rightpart)
-    for index in range(20, 20 + 2*lamda):
-        result.append(round(
-            weight * rightpart[index - 20] / temp * 100, 3))
-    return result
-
-
-def get_apseudo_aac(protein_sequence, lamda=30, weight=0.5):
+def get_apseudo_aac(protein_sequence, lamda=24, weight=0.5):
     """
     Computing all of type II pseudo-amino acid compostion descriptors based on
     three given properties. Note that the number of PAAC strongly depends on
@@ -422,18 +401,15 @@ def get_apseudo_aac(protein_sequence, lamda=30, weight=0.5):
         descriptors.
 
     """
-    # res1 = get_apseudo_aac1(protein_sequence, lamda=lamda, weight=weight)
-    # res2 = get_apseudo_aac2(protein_sequence, lamda=lamda, weight=weight)
-    # res = res1 + res2
-    rightpart = 0.0
+    total = 0.0
     order_cor_factors = list()
     for i in range(lamda):
         order_cor_factors.append(get_sequence_order_correlation_factor_apaac(
                 protein_sequence, k=i+1))
-        rightpart += sum(order_cor_factors[i])
+        total += sum(order_cor_factors[i])
     aac = get_aa_composition(protein_sequence)
     result = list()
-    temp = 1 + weight * rightpart
+    temp = 1 + weight * total
     if temp == 0.0:
         return []
     for index, i in enumerate(AALETTER):
@@ -444,13 +420,17 @@ def get_apseudo_aac(protein_sequence, lamda=30, weight=0.5):
         temp = order_cor_factors[i]
         rightpart.append(temp[0])
         rightpart.append(temp[1])
+        rightpart.append(temp[2])
+        rightpart.append(temp[3])
+        rightpart.append(temp[4])
+        rightpart.append(temp[5])
 
     temp = 1 + weight * sum(rightpart)
     if temp == 0.0:
         return []
-    for index in range(20, 20 + 2*lamda):
+    for index in range(6 * lamda):
         result.append(round(
-            weight * rightpart[index - 20] / temp * 100, 3))
+            weight * rightpart[index] / temp * 100, 3))
 
     return result
 
@@ -466,43 +446,8 @@ def load_data():
     return data
 
 
-def load_data_paac():
-    FILES = (
-        'uniprot-go-0001071',
-        'uniprot-go-0003824',
-        'uniprot-go-0005198',
-        'uniprot-go-0005215',
-        'uniprot-go-0005488',)
-    data = dict()
-    for file_name in FILES:
-        with open('data/molecular_functions/' + file_name + '.paac.txt') as f:
-            for line in f:
-                line = line.strip().split(' ')
-                prot_id = line[0]
-                paac = line[1:]
-                data[prot_id] = paac
-    return data
-
-
-def test():
-    from pseudo_aac_orig import GetAPseudoAAC, _GetPseudoAAC
-    import time
-    protein="MTDRARLRLHDTAAGVVRDFVPLRPGHVSIYLCGATVQGLPHIGHVRSGVAFDILRRWLLARGYDVAFIRNVTDIEDKILAKAAAAGRPWWEWAATHERAFTAAYDALDVLPPSAEPRATGHITQMIEMIERLIQAGHAYTGGGDVYFDVLSYPEYGQLSGHKIDDVHQGEGVAAGKRDQRDFTLWKGEKPGEPSWPTPWGRGRPGWHLECSAMARSYLGPEFDIHCGGMDLVFPHHENEIAQSRAAGDGFARYWLHNGWVTMGGEKMSKSLGNVLSMPAMLQRVRPAELRYYLGSAHYRSMLEFSETAMQDAVKAYVGLEDFLHRVRTRVGAVCPGDPTPRFAEALDDDLSVPIALAEIHHVRAEGNRALDAGDHDGALRSASAIRAMMGILGCDPLDQRWESRDETSAALAAVDVLVQAELQNREKAREQRNWALADEIRGRLKRAGIEVTDTADGPQWSLLGGDTK"
-    t1 = time.time()
-    res1 = GetAPseudoAAC(protein)
-    t2 = time.time()
-    res2 = get_apseudo_aac(protein)
-    t3 = time.time()
-    print res1 == res2
-    print t2 - t1, t3 - t2
-    res1 = _GetPseudoAAC(protein)
-    res2 = get_pseudo_aac(protein)
-    print res1 == res2
-
-
 def main(*args, **kwargs):
 
-    # paac_dict = load_data_paac()
     data = load_data()
     print 'Data has been loaded!'
     with open(
@@ -510,15 +455,10 @@ def main(*args, **kwargs):
             'w', 1073741824) as f:
         for prot_id, seq in data:
             f.write(prot_id)
-            # if prot_id in paac_dict:
-            #     for paac in paac_dict[prot_id]:
-            #         f.write(' ' + paac)
-            # else:
             paac = get_apseudo_aac(seq, lamda=24)
             for p in paac:
                 f.write(' ' + str(p))
             f.write('\n')
-    # test()
 
 if __name__ == '__main__':
     main()

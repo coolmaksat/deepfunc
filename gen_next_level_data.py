@@ -20,7 +20,7 @@ import os
 from collections import deque
 
 LAMBDA = 24
-DATA_ROOT = 'data/swiss/'
+DATA_ROOT = 'data/swiss2/'
 
 go = get_gene_ontology()
 go_model = dict()
@@ -55,7 +55,7 @@ def get_model(
     if go_id in go_model:
         return go_model[go_id]
     # length of APAAC
-    maxlen = 20 + 2 * LAMBDA
+    maxlen = 20 + 6 * LAMBDA
 
     model = Sequential()
     model.add(Embedding(max_features, embedding_dims))
