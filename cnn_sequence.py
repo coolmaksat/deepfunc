@@ -15,11 +15,12 @@ Clarendon Press Oxford (1986).
 """
 
 import numpy
+from keras.preprocessing import sequence
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation
 from keras.layers.embeddings import Embedding
-from keras.layers.recurrent import LSTM, GRU
-from keras.preprocessing import sequence
+from keras.layers.recurrent import LSTM, GRU, SimpleRNN
+from keras.layers.convolutional import Convolution1D, MaxPooling1D
 from sklearn.metrics import classification_report
 from keras.utils import np_utils
 from utils import train_val_test_split, normalize_aa
@@ -65,9 +66,12 @@ PI = {
     "P": 6.30, "Q": 5.65, "R": 10.76, "S": 5.68, "T": 5.60, "V": 6.02,
     "W": 5.88, "Y": 5.63}
 
-HYDROPHILICITY = normalize_aa(HYDROPHILICITY)
-HYDROPHOBICITY = normalize_aa(HYDROPHOBICITY)
-RESIDUEMASS = normalize_aa(RESIDUEMASS)
+# HYDROPHILICITY = normalize_aa(HYDROPHILICITY)
+# HYDROPHOBICITY = normalize_aa(HYDROPHOBICITY)
+# RESIDUEMASS = normalize_aa(RESIDUEMASS)
+# PK1 = normalize_aa(PK1)
+# PK2 = normalize_aa(PK2)
+# PI = normalize_aa(PI)
 
 LAMBDA = 24
 DATA_ROOT = 'data/recurrent/level_1/'
@@ -92,51 +96,86 @@ def load_data(go_id):
     pos = 1
     positive = list()
     negative = list()
-    ln = 0
     with open(DATA_ROOT + go_id + '.txt') as f:
         for line in f:
             line = line.strip().split(' ')
             label = int(line[0])
             seq = []
-            for x in line[2]:
-                seq.append(ord(x) - ord('A'))
+            for x in line[2][:500]:
+                acid = [
+                    HYDROPHOBICITY[x],
+                    HYDROPHILICITY[x],
+                    RESIDUEMASS[x],
+                    PK1[x], PK2[x], PI[x]]
+                seq.append(ord(x) - ord('A') + 1)
+            while len(seq) < 500:
+                seq.append(0.0)
             if label == pos:
                 positive.append(seq)
             else:
                 negative.append(seq)
-            ln += 1
     shuffle(negative, seed=10)
     n = len(positive)
     data = negative[:n] + positive
     labels = [0.0] * n + [1.0] * n
     # Previous was 30
     shuffle(data, labels, seed=30)
-    maxlen = 500
-    data = sequence.pad_sequences(data, maxlen=maxlen)
     return numpy.array(labels), numpy.array(data, dtype="float32")
 
 
 def model(labels, data, go_id):
     # set parameters:
-    max_features = 5000
-    batch_size = 16
-    nb_epoch = 12
+    # Embedding
+    max_features = 20000
     maxlen = 500
+    embedding_size = 128
+
+    # Convolution
+    filter_length = 3
+    nb_filter = 64
+    pool_length = 2
+
+    # LSTM
+    lstm_output_size = 70
+
+    # Training
+    batch_size = 30
+    nb_epoch = 12
+
     train, val, test = train_val_test_split(
         labels, data, batch_size=batch_size)
     train_label, train_data = train
 
     val_label, val_data = val
     test_label, test_data = test
-
     test_label_rep = test_label
 
     model = Sequential()
-    model.add(Embedding(
-        max_features, 11, mask_zero=True))
-    model.add(LSTM(11, 11))
-    model.add(Dropout(0.5))
-    model.add(Dense(11, 1))
+
+    model.add(Embedding(max_features, embedding_size, input_length=maxlen))
+    model.add(Dropout(0.25))
+    model.add(Convolution1D(nb_filter=nb_filter,
+                            filter_length=filter_length,
+                            border_mode='valid',
+                            activation='relu',
+                            subsample_length=1))
+    model.add(MaxPooling1D(pool_length=pool_length))
+    model.add(Dropout(0.25))
+    model.add(Convolution1D(nb_filter=nb_filter,
+                            filter_length=filter_length,
+                            border_mode='valid',
+                            activation='relu',
+                            subsample_length=1))
+    model.add(MaxPooling1D(pool_length=pool_length))
+    model.add(Dropout(0.25))
+    model.add(Convolution1D(nb_filter=nb_filter,
+                            filter_length=filter_length,
+                            border_mode='valid',
+                            activation='relu',
+                            subsample_length=1))
+    model.add(MaxPooling1D(pool_length=pool_length))
+    model.add(LSTM(lstm_output_size))
+    model.add(Dense(1))
     model.add(Activation('sigmoid'))
 
     model.compile(
@@ -170,6 +209,7 @@ def main(*args, **kwargs):
     print 'Starting binary classification for ' + go_id
     labels, data = load_data(go_id)
     report = model(labels, data, go_id)
+    print report
     # print_report(report, go_id)
 
 if __name__ == '__main__':

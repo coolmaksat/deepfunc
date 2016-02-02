@@ -92,7 +92,7 @@ def main(*args, **kwargs):
             for prop in props:
                 f.write(label)
                 for x in seq[:500]:
-                    f.write('\t' + prop[x])
+                    f.write('\t' + str(prop[x]))
                 for x in range(n, 500):
                     f.write(' 0.0')
                 f.write('\n')
