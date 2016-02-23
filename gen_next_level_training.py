@@ -7,7 +7,10 @@ import sys
 import os
 
 LAMBDA = 24
-DATA_ROOT = 'data/swiss/'
+DATA_ROOT = 'data/cnn/'
+CUR_LEVEL = 'level_2/'
+NEXT_LEVEL = 'level_3/'
+
 
 go = get_gene_ontology()
 
@@ -37,74 +40,60 @@ def get_subtree_set(go_id):
     return go_set
 
 
-def load_data_by_prot_id(go_id):
+def load_data(parent_id, go_id):
     data = dict()
-    with open(DATA_ROOT + 'level_2/data/' + go_id + '.txt') as f:
-        for line in f:
-            line = line.strip().split()
-            prot_id = line[0]
-            data[prot_id] = line[1:]
-    return data
-
-
-def load_training_data(go_id):
-    go_set = get_subtree_set(go_id)
-    data = list()
-    with open(DATA_ROOT + 'train.txt', 'r') as f:
+    with open(DATA_ROOT + NEXT_LEVEL + 'data/' + go_id + '.txt') as f:
         for line in f:
             line = line.strip().split('\t')
             prot_id = line[0]
-            gos = line[2].split('; ')
-            ok = False
-            go_ids = list()
-            for go_id in gos:
-                if go_id in go_set:
-                    ok = True
-                    go_ids.append(go_id)
-            if ok:
-                data.append((prot_id, go_ids))
+            seq = line[1]
+            gos = line[2].split(', ')
+            data[prot_id] = (seq, gos)
     return data
 
 
 def main(*args, **kwargs):
-    if len(args) != 2:
-        raise Exception('Please provide function id')
-    go_id = args[1]
-    paacs = load_data_by_prot_id(go_id)
-    data = load_training_data(go_id)
+    if len(args) < 3:
+        raise Exception('Please provide parent id and go id')
+    parent_id = args[1]
+    go_id = args[2]
+    if len(args) == 4:
+        level = int(args[3])
+        global CUR_LEVEL
+        global NEXT_LEVEL
+        CUR_LEVEL = 'level_' + str(level) + '/'
+        NEXT_LEVEL = 'level_' + str(level + 1) + '/'
+    data = load_data(parent_id, go_id)
     go_node = go[go_id]
-    go_set = get_subtree_set(go_id)
     for ch_id in go_node['children']:
         ch_set = get_subtree_set(ch_id)
         positives = list()
         negatives = list()
-        for prot_id, gos in data:
-            if prot_id not in paacs:
-                continue
+        for prot_id in data:
+            seq, gos = data[prot_id]
             pos = False
             for g_id in gos:
                 if g_id in ch_set:
                     pos = True
                     break
             if pos:
-                positives.append(prot_id)
+                positives.append((prot_id, seq))
             else:
-                negatives.append(prot_id)
-        n = len(positives)
-        shuffle(positives)
-        shuffle(negatives)
-        negatives = negatives[:n]
-        with open(DATA_ROOT + 'level_2/' + go_id + '/' + ch_id + '.txt', 'w') as f:
-            for prot_id in negatives:
-                f.write('0 ' + prot_id)
-                for p in paacs[prot_id]:
-                    f.write(' ' + str(p))
-                f.write('\n')
-            for prot_id in positives:
-                f.write('1 ' + prot_id)
-                for p in paacs[prot_id]:
-                    f.write(' ' + str(p))
-                f.write('\n')
+                negatives.append((prot_id, seq))
+        n = min(len(positives), len(negatives))
+        if n > 0:
+            shuffle(positives)
+            shuffle(negatives)
+            positives = positives[:n]
+            negatives = negatives[:n]
+            filename = DATA_ROOT + NEXT_LEVEL + go_id + '/' + ch_id + '.txt'
+            if not os.path.exists(os.path.dirname(filename)):
+                os.makedirs(os.path.dirname(filename))
+            with open(filename, 'w') as f:
+                for prot_id, seq in negatives:
+                    f.write('0 ' + prot_id + ' ' + seq + '\n')
+                for prot_id, seq in positives:
+                    f.write('1 ' + prot_id + ' ' + seq + '\n')
 
 
 if __name__ == '__main__':

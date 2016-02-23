@@ -5,8 +5,8 @@ import time
 from utils import shuffle, get_gene_ontology
 
 
-DATA_ROOT = 'data/swiss2/'
-RESULT_ROOT = 'data/swiss2/level_1/'
+DATA_ROOT = 'data/cnn/'
+RESULT_ROOT = 'data/cnn/level_1/'
 FILES = (
     'train.txt',)
 
@@ -64,7 +64,7 @@ def get_paac_by_prot_id():
 
     return data
 
-prot_paac = get_paac_by_prot_id()
+# prot_paac = get_paac_by_prot_id()
 
 
 def load_all_proteins():
@@ -119,14 +119,14 @@ def select_proteins(go_id, parent_go_set):
     negatives = negatives - positives
     positives = list(positives)
     negatives = list(negatives)
-    shuffle(positives, seed=10)
-    shuffle(negatives, seed=10)
+    shuffle(positives)
+    shuffle(negatives)
     min_len = min(len(positives), len(negatives))
     with open(RESULT_ROOT + go_id + '.txt', 'w') as f:
         for prot_id in negatives[:min_len]:
-            f.write('0 ' + prot_id + ' ' + prot_paac[prot_id] + '\n')
+            f.write('0 ' + prot_id + ' ' + go_seq[prot_id] + '\n')
         for prot_id in positives[:min_len]:
-            f.write('1 ' + prot_id + ' ' + prot_paac[prot_id] + '\n')
+            f.write('1 ' + prot_id + ' ' + go_seq[prot_id] + '\n')
     print 'Finished selection for ' + go_id
     # for ch_id in node['children']:
     #     select_proteins(ch_id, pos_go_set)

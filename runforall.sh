@@ -1,13 +1,20 @@
 #!/bin/bash
-FILES="data/swiss/level_1/GO:00*.txt"
-ROOT="data/swiss/level_1/"
+for lvl in {9..10}; do
+    DIRS="data/cnn/level_$lvl/GO:00*"
 
-for f in $FILES; do
-    bname=$(basename "$f")
-    filename="${bname%.*}"
-    if [ ! -e "$ROOT$filename.hdf5" ]; then
-        echo "Running neural network for $filename"
-        THEANO_FLAGS=mode=FAST_RUN,device=gpu1,floatX=float32 python nn_sequence_paac.py $filename
-        sleep 5s
-    fi
+    for d in $DIRS; do
+        FILES="$d/GO*.txt"
+        parent=$(basename $d)
+        for f in $FILES; do
+            bname=$(basename "$f")
+            filename="${bname%.*}"
+            if [ ! -e "$d/$filename.hdf5" ]; then
+                echo "Running neural network for level $lvl $parent $filename"
+                THEANO_FLAGS=mode=FAST_RUN,device=gpu1,floatX=float32 python cnn_sequence_2d.py $parent $filename $lvl
+                sleep 2s
+                python gen_next_level_data.py $parent $filename $lvl
+                python gen_next_level_training.py $parent $filename $lvl
+            fi
+        done
+    done
 done

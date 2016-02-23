@@ -1,5 +1,33 @@
 import numpy
 import math
+from sklearn.preprocessing import OneHotEncoder
+
+AALETTER = [
+    'A', 'R', 'N', 'D', 'C', 'E', 'Q', 'G', 'H', 'I',
+    'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V']
+
+encoder = OneHotEncoder()
+
+
+def init_encoder():
+    data = list()
+    for l in AALETTER:
+        data.append([ord(l)])
+    encoder.fit(data)
+
+init_encoder()
+
+
+def encode_seq_one_hot(seq, maxlen=1000):
+    data = list()
+    for l in seq:
+        data.append([ord(l)])
+    data = encoder.transform(data).toarray()
+    data = list(data)
+    data = data[:maxlen]
+    while (len(data) < maxlen):
+        data.append([0] * 20)
+    return data
 
 
 def train_val_test_split(labels, data, split=0.8, batch_size=16):

@@ -7,7 +7,7 @@ from utils import shuffle, get_gene_ontology
 
 
 DATA_ROOT = 'data/'
-RESULT_ROOT = 'data/swiss2/'
+RESULT_ROOT = 'data/cnn/'
 FILES = (
     'uniprot-swiss-mol-func.txt',)
 
