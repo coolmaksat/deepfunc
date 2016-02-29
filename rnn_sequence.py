@@ -2,158 +2,150 @@
 
 """
 THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python rnn_sequence.py
-
-
-The hydrophobicity values are from JACS, 1962, 84: 4240-4246. (C. Tanford).
-The hydrophilicity values are from PNAS, 1981, 78:3824-3828
-(T.P.Hopp & K.R.Woods). The side-chain mass for each of the 20 amino acids. CRC
-Handbook of Chemistry and Physics, 66th ed., CRC Press, Boca Raton,
-Florida (1985). R.M.C. Dawson, D.C. Elliott, W.H. Elliott, K.M. Jones,
-Data for Biochemical Research 3rd ed.,
-Clarendon Press Oxford (1986).
-
 """
 
 import numpy
-from keras.models import Sequential
-from keras.layers.core import Dense, Dropout, Activation
+from keras.models import Sequential, Graph
+from keras.layers.core import Dense, Dropout, Activation, Merge
 from keras.layers.embeddings import Embedding
 from keras.layers.recurrent import LSTM, GRU
 from keras.preprocessing import sequence
 from sklearn.metrics import classification_report
 from keras.utils import np_utils
-from utils import train_val_test_split, normalize_aa
+from utils import train_test_split, shuffle
 import sys
+from aaindex import (
+        AAINDEX,
+        CHAM810101,
+        NORM_AAINDEX
+    )
 
 
-AALETTER = [
-    "A", "R", "N", "D", "C", "E", "Q", "G", "H", "I",
-    "L", "K", "M", "F", "P", "S", "T", "W", "Y", "V"]
-
-HYDROPHOBICITY = {
-    "A": 0.62, "R": -2.53, "N": -0.78, "D": -0.90, "C": 0.29, "Q": -0.85,
-    "E": -0.74, "G": 0.48, "H": -0.40, "I": 1.38, "L": 1.06, "K": -1.50,
-    "M": 0.64, "F": 1.19, "P": 0.12, "S": -0.18, "T": -0.05, "W": 0.81,
-    "Y": 0.26, "V": 1.08}
-
-HYDROPHILICITY = {
-    "A": -0.5, "R": 3.0, "N": 0.2, "D": 3.0, "C": -1.0, "Q": 0.2, "E": 3.0,
-    "G": 0.0, "H": -0.5, "I": -1.8, "L": -1.8, "K": 3.0, "M": -1.3, "F": -2.5,
-    "P": 0.0, "S": 0.3, "T": -0.4, "W": -3.4, "Y": -2.3, "V": -1.5}
-
-RESIDUEMASS = {
-    "A": 15.0, "R": 101.0, "N": 58.0, "D": 59.0, "C": 47.0, "Q": 72.0,
-    "E": 73.0, "G": 1.000, "H": 82.0, "I": 57.0, "L": 57.0, "K": 73.0,
-    "M": 75.0, "F": 91.0, "P": 42.0, "S": 31.0, "T": 45.0, "W": 130.0,
-    "Y": 107.0, "V": 43.0}
-
-PK1 = {
-    "A": 2.35, "C": 1.71, "D": 1.88, "E": 2.19, "F": 2.58, "G": 2.34,
-    "H": 1.78, "I": 2.32, "K": 2.20, "L": 2.36, "M": 2.28, "N": 2.18,
-    "P": 1.99, "Q": 2.17, "R": 2.18, "S": 2.21, "T": 2.15, "V": 2.29,
-    "W": 2.38, "Y": 2.20}
-
-PK2 = {
-    "A": 9.87, "C": 10.78, "D": 9.60, "E": 9.67, "F": 9.24, "G": 9.60,
-    "H": 8.97, "I": 9.76, "K": 8.90, "L": 9.60, "M": 9.21, "N": 9.09,
-    "P": 10.6, "Q": 9.13, "R": 9.09, "S": 9.15, "T": 9.12, "V": 9.74,
-    "W": 9.39, "Y": 9.11}
-
-PI = {
-    "A": 6.11, "C": 5.02, "D": 2.98, "E": 3.08, "F": 5.91, "G": 6.06,
-    "H": 7.64, "I": 6.04, "K": 9.47, "L": 6.04, "M": 5.74, "N": 10.76,
-    "P": 6.30, "Q": 5.65, "R": 10.76, "S": 5.68, "T": 5.60, "V": 6.02,
-    "W": 5.88, "Y": 5.63}
-
-HYDROPHILICITY = normalize_aa(HYDROPHILICITY)
-HYDROPHOBICITY = normalize_aa(HYDROPHOBICITY)
-RESIDUEMASS = normalize_aa(RESIDUEMASS)
-
-LAMBDA = 24
+MAXLEN = 200
 DATA_ROOT = 'data/recurrent/level_1/'
 
 
-def shuffle(*args, **kwargs):
-    seed = None
-    if 'seed' in kwargs:
-        seed = kwargs['seed']
-    rng_state = numpy.random.get_state()
-    for arg in args:
-        if seed is not None:
-            numpy.random.seed(seed)
-        else:
-            numpy.random.set_state(rng_state)
-        numpy.random.shuffle(arg)
-
-
 def load_data(go_id):
-    data = list()
+    data1 = list()
+    data2 = list()
     labels = list()
-    pos = 1
-    positive = list()
-    negative = list()
-    ln = 0
+    positive1 = list()
+    negative1 = list()
+    positive2 = list()
+    negative2 = list()
     with open(DATA_ROOT + go_id + '.txt') as f:
         for line in f:
             line = line.strip().split(' ')
             label = int(line[0])
-            seq = []
-            for x in line[2]:
-                seq.append(ord(x) - ord('A'))
-            if label == pos:
-                positive.append(seq)
+            seq1 = []
+            seq2 = []
+            for x in line[2][:MAXLEN]:
+                seq1.append(CHAM810101[AAINDEX[x]])
+                seq2.append(NORM_AAINDEX[AAINDEX[x]])
+            if label == 1:
+                positive1.append(seq1)
+                positive2.append(seq2)
             else:
-                negative.append(seq)
-            ln += 1
-    shuffle(negative, seed=10)
-    n = len(positive)
-    data = negative[:n] + positive
-    labels = [0.0] * n + [1.0] * n
-    # Previous was 30
-    shuffle(data, labels, seed=30)
-    maxlen = 500
-    data = sequence.pad_sequences(data, maxlen=maxlen)
-    return numpy.array(labels), numpy.array(data, dtype="float32")
+                negative1.append(seq1)
+                negative2.append(seq2)
+    shuffle(negative1)
+    shuffle(negative2)
+    n = min(len(positive1), len(negative1))
+    data1 = negative1[:n] + positive1[:n]
+    data2 = negative2[:n] + positive2[:n]
+    labels = [0] * n + [1] * n
+    shuffle(data1, data2, labels)
+    data1 = sequence.pad_sequences(data1, maxlen=MAXLEN, padding='post')
+    data2 = sequence.pad_sequences(data2, maxlen=MAXLEN, padding='post')
+    return (
+        numpy.array(labels),
+        numpy.array(data1, dtype="float32"),
+        numpy.array(data2, dtype="float32"))
 
 
-def model(labels, data, go_id):
+def model(labels, data1, data2, go_id):
     # set parameters:
-    max_features = 5000
+    max_features = len(AAINDEX) + 1
+    embedding_size = 128
     batch_size = 16
-    nb_epoch = 12
-    maxlen = 500
-    train, val, test = train_val_test_split(
-        labels, data, batch_size=batch_size)
-    train_label, train_data = train
+    nb_epoch = 10
+    lstm_size = 128
 
-    val_label, val_data = val
-    test_label, test_data = test
+    train1, test1 = train_test_split(
+        labels, data1, batch_size=batch_size)
+    train2, test2 = train_test_split(
+        labels, data2, batch_size=batch_size)
+
+    train_label, train1_data = train1
+    train_label, train2_data = train2
+
+    test_label, test1_data = test1
+    test_label, test2_data = test2
 
     test_label_rep = test_label
+    # 256 0.5 256
+    first = Sequential()
+    first.add(Embedding(
+        max_features, embedding_size,
+        input_length=MAXLEN))
+    first.add(LSTM(lstm_size))
+
+    second = Sequential()
+    second.add(Embedding(
+        max_features, embedding_size,
+        input_length=MAXLEN))
+    second.add(Dropout(0.5))
+    second.add(LSTM(lstm_size))
 
     model = Sequential()
-    model.add(Embedding(
-        max_features, 11, mask_zero=True))
-    model.add(LSTM(11, 11))
+    model.add(Merge([first, second], mode='concat'))
     model.add(Dropout(0.5))
-    model.add(Dense(11, 1))
+    model.add(Dense(128))
+    model.add(Activation('relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(1))
     model.add(Activation('sigmoid'))
 
     model.compile(
         loss='binary_crossentropy', optimizer='adam', class_mode='binary')
-
     model.fit(
-        X=train_data, y=train_label,
+        X=[train1_data, train2_data], y=train_label,
         batch_size=batch_size, nb_epoch=nb_epoch,
         show_accuracy=True, verbose=1,
-        validation_data=(val_data, val_label))
+        validation_split=0.2)
+
+    # model = Graph()
+    # model.add_input(name='input', input_shape=(MAXLEN,), dtype=int)
+    # model.add_node(Embedding(
+    #     max_features, 128, input_length=MAXLEN, mask_zero=True),
+    #                name='embedding', input='input')
+    # model.add_node(LSTM(64), name='forward', input='embedding')
+    # model.add_node(
+    #     LSTM(64, go_backwards=True), name='backward', input='embedding')
+    # model.add_node(
+    #     Dropout(0.5), name='dropout', inputs=['forward', 'backward'])
+    # model.add_node(
+    #     Dense(1, activation='sigmoid'), name='sigmoid', input='dropout')
+    # model.add_output(name='output', input='sigmoid')
+
+    # # try using different optimizers and different optimizer configs
+    # model.compile('adam', {'output': 'binary_crossentropy'})
+    # model.fit(
+    #     {'input': train_data, 'output': train_label},
+    #     batch_size=batch_size,
+    #     nb_epoch=nb_epoch,
+    #     validation_split=0.2)
+    # pred_data = model.predict({'input': test_data}, batch_size=batch_size)
+    # pred_data = numpy.round(numpy.array(pred_data['output']))
     # # Loading saved weights
     # print 'Loading weights'
     # model.load_weights(DATA_ROOT + go_id + '.hdf5')
-    pred_data = model.predict_classes(test_data, batch_size=batch_size)
+    pred_data = model.predict_classes(
+        [test1_data, test2_data],
+        batch_size=batch_size)
     # Saving the model
-    print 'Saving the model for ' + go_id
-    model.save_weights(DATA_ROOT + go_id + '.hdf5', overwrite=True)
+    # print 'Saving the model for ' + go_id
+    # model.save_weights(DATA_ROOT + go_id + '.hdf5', overwrite=True)
     return classification_report(list(test_label_rep), pred_data)
 
 
@@ -168,8 +160,9 @@ def main(*args, **kwargs):
         sys.exit('Please provide GO Id')
     go_id = args[1]
     print 'Starting binary classification for ' + go_id
-    labels, data = load_data(go_id)
-    report = model(labels, data, go_id)
+    labels, data1, data2 = load_data(go_id)
+    report = model(labels, data1, data2, go_id)
+    print report
     # print_report(report, go_id)
 
 if __name__ == '__main__':

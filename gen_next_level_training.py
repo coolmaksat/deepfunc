@@ -2,14 +2,14 @@
 
 import numpy
 from utils import (
-    shuffle, train_val_test_split, get_gene_ontology, get_model_max_features)
+    shuffle, train_val_test_split, get_gene_ontology)
 import sys
 import os
 
 LAMBDA = 24
 DATA_ROOT = 'data/cnn/'
-CUR_LEVEL = 'level_2/'
-NEXT_LEVEL = 'level_3/'
+CUR_LEVEL = 'level_1/'
+NEXT_LEVEL = 'level_2/'
 
 
 go = get_gene_ontology()

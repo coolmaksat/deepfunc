@@ -1,10 +1,7 @@
 import numpy
 import math
 from sklearn.preprocessing import OneHotEncoder
-
-AALETTER = [
-    'A', 'R', 'N', 'D', 'C', 'E', 'Q', 'G', 'H', 'I',
-    'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V']
+from aaindex import AALETTER
 
 encoder = OneHotEncoder()
 
@@ -177,11 +174,3 @@ def normalize_aa(prop):
     for key, value in prop.iteritems():
         res[key] = (value - aap_mean) / aap_std
     return res
-
-
-def get_model_max_features(size):
-    if size == 12567208:
-        return 10000
-    if size == 32567208:
-        return 60000
-    return 5000

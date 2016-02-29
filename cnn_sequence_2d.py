@@ -16,90 +16,75 @@ Clarendon Press Oxford (1986).
 
 import numpy
 from keras.preprocessing import sequence
-from keras.models import Sequential
-from keras.layers.core import Dense, Dropout, Activation, Flatten
+from keras.models import Sequential, Graph
+from keras.layers.core import Dense, Dropout, Activation, Flatten, Merge
 from keras.layers.embeddings import Embedding
 from keras.layers.recurrent import LSTM, GRU, SimpleRNN
 from keras.layers.convolutional import Convolution2D, MaxPooling2D, MaxPooling1D
 from sklearn.metrics import classification_report
 from sklearn.preprocessing import OneHotEncoder
 from keras.utils import np_utils
-from utils import train_val_test_split, normalize_aa
+from utils import (
+    train_test_split, normalize_aa,
+    shuffle, encode_seq_one_hot
+)
 import sys
 import pdb
 from keras.optimizers import Adam
+from aaindex import (
+    LUTR910101, NORM_AACOOC, AAINDEX,
+    ALTS910101, CROG050101, OGAK980101,
+    KOLA920101, TOBD000101, MEHP950102)
 
-AALETTER = [
-    'A', 'R', 'N', 'D', 'C', 'E', 'Q', 'G', 'H', 'I',
-    'L', 'K', 'M', 'F', 'P', 'S', 'T', 'W', 'Y', 'V']
 
-MAXLEN = 1000
+MAXLEN = 500
 DATA_ROOT = 'data/cnn/'
 CUR_LEVEL = 'level_1/'
 NEXT_LEVEL = 'level_2/'
 DATA_ROOT += CUR_LEVEL
 
-encoder = OneHotEncoder()
-
-
-def init_encoder():
-    data = list()
-    for l in AALETTER:
-        data.append([ord(l)])
-    encoder.fit(data)
-
-init_encoder()
-
-
-def encode_seq(seq):
-    data = list()
-    for l in seq:
-        data.append([ord(l)])
-    data = encoder.transform(data).toarray()
-    return list(data)
-
-
-def shuffle(*args, **kwargs):
-    seed = None
-    if 'seed' in kwargs:
-        seed = kwargs['seed']
-    rng_state = numpy.random.get_state()
-    for arg in args:
-        if seed is not None:
-            numpy.random.seed(seed)
-        else:
-            numpy.random.set_state(rng_state)
-        numpy.random.shuffle(arg)
-
 
 def load_data(parent_id, go_id):
-    data = list()
+    data1 = list()
+    data2 = list()
     labels = list()
-    pos = 1
-    positive = list()
-    negative = list()
+    positive1 = list()
+    negative1 = list()
+    positive2 = list()
+    negative2 = list()
+
     with open(DATA_ROOT + parent_id + '/' + go_id + '.txt') as f:
         for line in f:
             line = line.strip().split(' ')
             label = int(line[0])
             seq = line[2][:MAXLEN]
-            seq = encode_seq(seq)
-            while len(seq) < MAXLEN:
-                seq.append([0.0] * 20)
-            if label == pos:
-                positive.append(seq)
+            sq1 = encode_seq_one_hot(seq, maxlen=MAXLEN)
+            sq2 = list()
+            for l in seq:
+                sq2.append(MEHP950102[AAINDEX[l]])
+            while len(sq2) < MAXLEN:
+                sq2.append([0.0] * 20)
+            if label == 1:
+                positive1.append(sq1)
+                positive2.append(sq2)
             else:
-                negative.append(seq)
-    shuffle(negative, seed=10)
-    n = len(positive)
-    data = negative[:n] + positive
+                negative1.append(sq1)
+                negative2.append(sq2)
+    shuffle(negative1, negative2)
+    n = min(len(positive1), len(negative1))
+    data1 = negative1[:n] + positive1[:n]
+    data2 = negative2[:n] + positive2[:n]
     labels = [0.0] * n + [1.0] * n
     # Previous was 30
-    shuffle(data, labels, seed=30)
-    return numpy.array(labels), numpy.array(data, dtype='float32')
+    shuffle(data1, data2, labels)
+    return (
+        numpy.array(labels),
+        numpy.array(data1, dtype='float32'),
+        numpy.array(data2, dtype='float32'),
+        numpy.array(data1, dtype='float32'))
 
 
-def model(labels, data, parent_id, go_id):
+def model(labels, data1, data2, data3, parent_id, go_id):
     # set parameters:
     # Convolution
     nb_filter = 64
@@ -109,58 +94,89 @@ def model(labels, data, parent_id, go_id):
     pool_length = 2
 
     # Training
-    batch_size = 2
-    if len(data) >= 512:
-        batch_size = 32
-    nb_epoch = 12
+    batch_size = 32
+    nb_epoch = 10
 
-    train, val, test = train_val_test_split(
-        labels, data, batch_size=batch_size, split=0.6)
-    train_label, train_data = train
+    lstm_size = 70
 
-    if len(train_data) == 0:
+    train1, test1 = train_test_split(
+        labels, data1, batch_size=batch_size, split=0.8)
+    train_label, train1_data = train1
+
+    train2, test2 = train_test_split(
+        labels, data2, batch_size=batch_size, split=0.8)
+    train_label, train2_data = train2
+
+    train3, test3 = train_test_split(
+        labels, data3, batch_size=batch_size, split=0.8)
+    train_label, train3_data = train3
+
+    if len(train1_data) < 100:
         raise Exception("No training data for " + go_id)
-    val_label, val_data = val
-    test_label, test_data = test
+    test_label, test1_data = test1
+    test_label, test2_data = test2
+    test_label, test3_data = test3
     test_label_rep = test_label
 
-    train_data = train_data.reshape(train_data.shape[0], 1, MAXLEN, 20)
-    test_data = test_data.reshape(test_data.shape[0], 1, MAXLEN, 20)
-    val_data = val_data.reshape(val_data.shape[0], 1, MAXLEN, 20)
+    train1_data = train1_data.reshape(train1_data.shape[0], 1, MAXLEN, 20)
+    test1_data = test1_data.reshape(test1_data.shape[0], 1, MAXLEN, 20)
+
+    train2_data = train2_data.reshape(train2_data.shape[0], 1, MAXLEN, 20)
+    test2_data = test2_data.reshape(test2_data.shape[0], 1, MAXLEN, 20)
+
+    first = Sequential()
+
+    first.add(Convolution2D(
+        nb_filter, nb_row, nb_col,
+        border_mode='valid',
+        input_shape=(1, MAXLEN, 20)))
+    first.add(Activation('relu'))
+    first.add(MaxPooling2D(pool_size=(pool_length, 1)))
+    first.add(Dropout(0.5))
+    first.add(Flatten())
+
+    second = Sequential()
+
+    second.add(Convolution2D(
+        nb_filter, nb_row, nb_col,
+        border_mode='valid',
+        input_shape=(1, MAXLEN, 20)))
+    second.add(Activation('relu'))
+    second.add(MaxPooling2D(pool_size=(pool_length, 1)))
+    second.add(Dropout(0.5))
+    second.add(Flatten())
+
+    third = Sequential()
+    third.add(LSTM(lstm_size, return_sequences=True, input_shape=(MAXLEN, 20)))
+    third.add(Dropout(0.25))
+    third.add(LSTM(lstm_size, return_sequences=False))
+    third.add(Dropout(0.25))
+    third.add(Flatten())
+
     model = Sequential()
-
-    model.add(Convolution2D(nb_filter, nb_row, nb_col,
-                            border_mode='valid',
-                            input_shape=(1, MAXLEN, 20)))
-    model.add(Activation('relu'))
-    model.add(Convolution2D(nb_filter, nb_row, nb_col))
-    model.add(Activation('relu'))
-    model.add(MaxPooling2D(pool_size=(pool_length, 1)))
-    model.add(Dropout(0.25))
-
-    model.add(Flatten())
+    model.add(Merge([first, third], mode='concat'))
     model.add(Dense(128))
     model.add(Activation('relu'))
     model.add(Dropout(0.5))
     model.add(Dense(1))
     model.add(Activation('sigmoid'))
-
     adam = Adam(lr=0.00001)
     model.compile(
-        loss='binary_crossentropy', optimizer='adadelta', class_mode='binary')
+        loss='binary_crossentropy', optimizer=adam, class_mode='binary')
 
     model.fit(
-        X=train_data, y=train_label,
+        X=[train1_data, train3_data], y=train_label,
         batch_size=batch_size, nb_epoch=nb_epoch,
         show_accuracy=True, verbose=1,
-        validation_data=(val_data, val_label))
-    # # Loading saved weights
+        validation_split=0.3)
+    # Loading saved weights
     # print 'Loading weights'
     # model.load_weights(DATA_ROOT + go_id + '.hdf5')
-    pred_data = model.predict_classes(test_data, batch_size=batch_size)
+    pred_data = model.predict_classes(
+        [test1_data, test3_data], batch_size=batch_size)
     # Saving the model
     print 'Saving the model for ' + go_id
-    # model.save_weights(DATA_ROOT + parent_id + '/' + go_id + '.hdf5', overwrite=True)
+    model.save_weights(DATA_ROOT + parent_id + '/' + go_id + '.hdf5', overwrite=True)
     return classification_report(list(test_label_rep), pred_data)
 
 
@@ -184,8 +200,8 @@ def main(*args, **kwargs):
         NEXT_LEVEL = 'level_' + str(level + 1) + '/'
         DATA_ROOT = 'data/cnn/' + CUR_LEVEL
     print 'Starting binary classification for ' + parent_id + '-' + go_id
-    labels, data = load_data(parent_id, go_id)
-    report = model(labels, data, parent_id, go_id)
+    labels, data1, data2, data3 = load_data(parent_id, go_id)
+    report = model(labels, data1, data2, data3, parent_id, go_id)
     print report
     print_report(report, parent_id, go_id)
 

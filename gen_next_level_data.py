@@ -16,8 +16,8 @@ from keras.utils import np_utils
 from utils import (
     shuffle, train_val_test_split,
     get_gene_ontology,
-    get_model_max_features,
     encode_seq_one_hot)
+from keras.optimizers import Adam
 
 import sys
 import os
@@ -25,13 +25,13 @@ from collections import deque
 
 LAMBDA = 24
 DATA_ROOT = 'data/cnn/'
-CUR_LEVEL = 'level_2/'
-NEXT_LEVEL = 'level_3/'
+CUR_LEVEL = 'level_1/'
+NEXT_LEVEL = 'level_2/'
 
 go = get_gene_ontology()
 go_model = dict()
 
-MAXLEN = 1000
+MAXLEN = 500
 
 
 def get_gos_by_prot_id():
@@ -75,14 +75,18 @@ def get_model(
                             input_shape=(1, MAXLEN, 20)))
     model.add(Activation('relu'))
     model.add(MaxPooling2D(pool_size=(pool_length, pool_length)))
-    model.add(Dropout(0.5))
+    model.add(Dropout(0.25))
 
     model.add(Flatten())
+    model.add(Dense(128))
+    model.add(Activation('relu'))
+    model.add(Dropout(0.5))
     model.add(Dense(1))
     model.add(Activation('sigmoid'))
 
+    adam = Adam(lr=0.00001)
     model.compile(
-        loss='binary_crossentropy', optimizer='adam', class_mode='binary')
+        loss='binary_crossentropy', optimizer=adam, class_mode='binary')
     # Loading saved weights
     print 'Loading weights for ' + go_id
     model.load_weights(filepath)
@@ -110,7 +114,7 @@ def main(*args, **kwargs):
     hots = hots.reshape(hots.shape[0], 1, MAXLEN, 20)
     pred = model.predict_classes(
         hots,
-        batch_size=1,
+        batch_size=16,
         verbose=1)
     result = list()
     for i in range(len(data)):
