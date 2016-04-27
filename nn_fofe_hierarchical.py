@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 
 '''
-THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python cnn_sequence_hierarchical.py
+THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python nn_fofe_hierarchical.py
 '''
 
 import numpy
 from keras.models import Sequential
 from keras.layers.core import (
-    Dense, Dropout, Activation, Flatten)
+    Dense, Dropout, Activation, Flatten, Highway)
 from keras.layers.convolutional import Convolution1D, MaxPooling1D
 from keras.layers.recurrent import LSTM
 from keras.optimizers import SGD
@@ -19,13 +19,15 @@ from utils import (
 import sys
 import os
 from collections import deque
+import pandas as pd
+from multiprocessing import Pool
 
 LAMBDA = 24
-DATA_ROOT = 'data/cnn/'
-MAXLEN = 500
+DATA_ROOT = 'data/fofe/'
 
 go = get_gene_ontology()
 go_model = dict()
+classifier = None
 
 
 def load_data(parent_id, go_id):
@@ -43,28 +45,9 @@ def get_model(
     if key in go_model:
         return go_model[key]
     model = Sequential()
-
-    model.add(Convolution1D(input_dim=20,
-                            input_length=MAXLEN,
-                            nb_filter=320,
-                            filter_length=20,
-                            border_mode='valid',
-                            activation='relu',
-                            subsample_length=1))
-    model.add(MaxPooling1D(pool_length=10, stride=10))
-    model.add(Dropout(0.25))
-    model.add(Convolution1D(nb_filter=32,
-                            filter_length=32,
-                            border_mode='valid',
-                            activation='relu',
-                            subsample_length=1))
-    model.add(MaxPooling1D(pool_length=8))
-    model.add(LSTM(128))
-    model.add(Dense(1024))
-    model.add(Activation('relu'))
-    model.add(Dropout(0.5))
-    model.add(Dense(1))
-    model.add(Activation('sigmoid'))
+    model.add(Dense(8000, activation='relu', input_dim=8000))
+    model.add(Highway())
+    model.add(Dense(1, activation='sigmoid'))
 
     model.compile(
         loss='binary_crossentropy', optimizer='rmsprop', class_mode='binary')
@@ -82,7 +65,7 @@ def get_model(
 
 def get_go_classifier(go_id, level):
     global model_n
-    if level < 4:
+    if level < 2:
         for ch_id in go[go_id]['children']:
             model = get_model(ch_id, go_id, level + 1)
             go[ch_id]['model'] = model
@@ -92,21 +75,16 @@ def get_go_classifier(go_id, level):
 
 
 def load_unseen_proteins():
-    data = list()
-    with open(DATA_ROOT + 'test.txt', 'r') as f:
-        for line in f:
-            line = line.strip().split()
-            prot_id = line[0]
-            seq = line[1]
-            data.append((prot_id, seq))
-    return data
+    df = pd.read_pickle(DATA_ROOT + 'test.pkl')
+    return df
 
 
-def predict_functions(classifier, seq):
+def predict_functions(df):
     q = deque()
     q.append(classifier)
     functions = list()
-    data = numpy.array([encode_seq_one_hot(seq, maxlen=MAXLEN)])
+    data = df[1]['data']
+    data = data.reshape(1, data.shape[0])
     while len(q) > 0:
         x = q.popleft()
         ok = True
@@ -122,25 +100,23 @@ def predict_functions(classifier, seq):
                     q.append(go[ch_id])
         if ok:
             functions.append(x['id'])
-
-    return functions
+    return df[1]['proteins'], functions
 
 
 def main(*args, **kwargs):
-    try:
-        classifier = get_go_classifier('GO:0003674', 0)
-        print 'Total number of models %d' % (len(go_model), )
-        print 'Loading unseen proteins'
-        prots = load_unseen_proteins()
-        with open(DATA_ROOT + 'predictions.txt', 'w') as f:
-            for prot_id, seq in prots:
-                f.write(prot_id)
-                functions = predict_functions(classifier, seq)
-                for func in functions:
-                    f.write(' ' + func)
-                f.write('\n')
-    except Exception, e:
-        print e
+    global classifier
+    classifier = get_go_classifier('GO:0003674', 0)
+    print 'Total number of models %d' % (len(go_model), )
+    print 'Loading unseen proteins'
+    df = load_unseen_proteins()
+    p = Pool(32)
+    predictions = p.map(predict_functions, df.iterrows())
+    with open(DATA_ROOT + 'predictions.txt', 'w') as f:
+        for protein, functions in predictions:
+            f.write(protein)
+            for func in functions:
+                f.write(' ' + func)
+            f.write('\n')
 
 if __name__ == '__main__':
     main(*sys.argv)

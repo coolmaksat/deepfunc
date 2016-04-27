@@ -1,10 +1,21 @@
 #!/bin/bash
-FILES="data/swiss/level_1/GO:00*.txt"
+for lvl in {1..10}; do
+    DIRS="data/fofe/level_$lvl/GO:00*"
 
-for f in $FILES; do
-    bname=$(basename "$f")
-    filename="${bname%.*}"
-    echo "Running generation for $filename"
-    THEANO_FLAGS=mode=FAST_RUN,device=gpu1,floatX=float32 python gen_next_level_data.py $filename
-    sleep 5s
+    for d in $DIRS; do
+        FILES="$d/GO*.hdf5"
+        parent=$(basename $d)
+        for f in $FILES; do
+            if [ -e $f ]; then
+                bname=$(basename "$f")
+                filename="${bname%.*}"
+                size=$(stat -c%s "$f")
+                if [ "$size" = "800" ]; then
+                    echo "The $f is $size bytes. Deleting..."
+                    rm $f
+                fi
+                echo $filename
+            fi
+        done
+    done
 done

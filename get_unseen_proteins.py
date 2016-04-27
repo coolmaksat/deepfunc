@@ -7,9 +7,9 @@ from utils import shuffle, get_gene_ontology
 
 
 DATA_ROOT = 'data/'
-RESULT_ROOT = 'data/cnn/'
+RESULT_ROOT = 'data/yeast/'
 FILES = (
-    'uniprot-swiss-mol-func.txt',)
+    'uniprot-swiss-mol-func-yeast.txt',)
 
 
 def load_all_proteins_paac():
@@ -78,7 +78,7 @@ def main():
     start_time = time.time()
     print 'Loading all proteins'
     all_prots = load_all_proteins()
-    shuffle(all_prots, seed=0)
+    shuffle(all_prots)
     split = 0.8
     train_len = int(len(all_prots) * split)
     # print 'Loading train proteins'

@@ -5,7 +5,7 @@ import time
 from utils import shuffle, get_gene_ontology
 
 
-DATA_ROOT = 'data/cnn/'
+DATA_ROOT = 'data/fofe/'
 
 go = get_gene_ontology()
 
@@ -52,9 +52,19 @@ def get_anchestors(go_id):
     return go_set
 
 
+def load_models():
+    models = set()
+    with open(DATA_ROOT + 'models.txt') as f:
+        for line in f:
+            line = line.strip()
+            models |= get_anchestors(line)
+    return models
+
+
 def load_all_proteins():
     data = list()
     file_name = 'test.txt'
+    models = load_models()
     with open(DATA_ROOT + file_name, 'r') as f:
         for line in f:
             line = line.strip().split('\t')
@@ -62,14 +72,14 @@ def load_all_proteins():
             go_set = set()
             for go_id in line[2].split('; '):
                 if go_id in molecular_functions:
-                    go_set |= get_anchestors(go_id)
+                    go_set |= get_anchestors(go_id).intersection(models)
             data.append((prot_id, go_set))
     return data
 
 
 def load_pred_proteins():
     data = list()
-    file_name = 'predictions.txt'
+    file_name = 'predictions-part.txt'
     with open(DATA_ROOT + file_name, 'r') as f:
         for line in f:
             line = line.strip().split()
@@ -98,21 +108,19 @@ def main():
     real_data = load_all_proteins()
     print 'Loading predicted data'
     pred_data = load_pred_proteins()
-    tp = 0
-    fp = 0
-    fn = 0
+    f = 0.0
     for i in range(len(pred_data)):
         prot1_id, gos = real_data[i]
         prot2_id, pred_gos = pred_data[i]
         if prot1_id == prot2_id:
-            tp += len(gos.intersection(pred_gos))
-            fp += len(pred_gos - gos)
-            fn += len(gos - pred_gos)
-    print tp, fp, fn
-    recall = tp / (1.0 * (tp + fn))
-    precision = tp / (1.0 * (tp + fp))
-    f = 2 * precision * recall / (precision + recall)
-    print recall, precision, f
+            tp = len(gos.intersection(pred_gos))
+            fp = len(pred_gos - gos)
+            fn = len(gos - pred_gos)
+            recall = tp / (1.0 * (tp + fn))
+            precision = tp / (1.0 * (tp + fp))
+            f += 2 * precision * recall / (precision + recall)
+
+    print f / len(pred_data)
     end_time = time.time() - start_time
     print 'Done in %d seconds' % (end_time, )
 

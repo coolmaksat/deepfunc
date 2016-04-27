@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 '''
-THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python cnn_sequence.py
+THEANO_FLAGS=mode=FAST_RUN,device=gpu,floatX=float32 python nn_fofe.py parent_id go_id
 '''
 
 import numpy
@@ -27,81 +27,62 @@ from aaindex import (
     LUTR910101, NORM_AACOOC, AAINDEX,
     ALTS910101, CROG050101, OGAK980101,
     KOLA920101, TOBD000101, MEHP950102, RUSR970103)
+import pandas as pd
 
 
 MAXLEN = 500
-DATA_ROOT = 'data/cnn/'
+DATA_ROOT = 'data/fofe/'
 CUR_LEVEL = 'level_1/'
 NEXT_LEVEL = 'level_2/'
 DATA_ROOT += CUR_LEVEL
 
 
 def load_data(parent_id, go_id):
-    data = list()
-    labels = list()
-    positive = list()
-    negative = list()
-    with open(DATA_ROOT + parent_id + '/' + go_id + '.txt') as f:
-        for line in f:
-            line = line.strip().split(' ')
-            label = int(line[0])
-            seq = line[2][:MAXLEN]
-            if label == 1:
-                labels.append(1)
-                positive.append(seq)
-            else:
-                labels.append(0)
-                negative.append(seq)
-    shuffle(negative, seed=0)
-    n = len(positive)
-    negative = negative[:n]
-    n = len(positive)
-    labels = [0] * len(negative) + [1] * len(positive)
-    data = negative + positive
-    for i in range(len(data)):
-        data[i] = encode_seq_one_hot(data[i], maxlen=MAXLEN)
-    shuffle(data, labels, seed=0)
-    return numpy.array(labels), numpy.array(data, dtype='float32')
+    df = pd.read_pickle(DATA_ROOT + parent_id + '/' + go_id + '.pkl')
+    # shuffle(df, seed=0)
+    # numpy.random.seed(0)
+    df = df.reindex(numpy.random.permutation(df.index))
+    return df
 
 
-def model(labels, data, parent_id, go_id):
+def model(df, parent_id, go_id):
 
     # Training
     batch_size = 64
     nb_epoch = 64
 
-    train, test = train_test_split(
-        labels, data, batch_size=batch_size)
-    train_label, train_data = train
+    # Split pandas DataFrame
+    n = len(df)
+    split = 0.8
+    m = int(n * split)
+    train, test = df[:m], df[m:]
+
+
+    # train, test = train_test_split(
+    #     labels, data, batch_size=batch_size)
+
+    train_label, train_data = train['labels'], train['data']
 
     if len(train_data) < 100:
         raise Exception("No training data for " + go_id)
 
-    test_label, test_data = test
+    test_label, test_data = test['labels'], test['data']
     test_label_rep = test_label
 
+
+    train_data = train_data.as_matrix()
+
+    test_data = test_data.as_matrix()
+    train_data = numpy.hstack(train_data).reshape(train_data.shape[0], 8000)
+    test_data = numpy.hstack(test_data).reshape(test_data.shape[0], 8000)
+    shape = numpy.shape(train_data)
+
+    print('X_train shape: ', shape)
+    print('X_test shape: ', test_data.shape)
     model = Sequential()
-    model.add(Convolution1D(input_dim=20,
-                            input_length=MAXLEN,
-                            nb_filter=320,
-                            filter_length=20,
-                            border_mode='valid',
-                            activation='relu',
-                            subsample_length=1))
-    model.add(MaxPooling1D(pool_length=10, stride=10))
-    model.add(Dropout(0.25))
-    model.add(Convolution1D(nb_filter=32,
-                            filter_length=32,
-                            border_mode='valid',
-                            activation='relu',
-                            subsample_length=1))
-    model.add(MaxPooling1D(pool_length=8))
-    model.add(LSTM(128))
-    model.add(Dense(1024))
-    model.add(Activation('relu'))
-    model.add(Dropout(0.5))
-    model.add(Dense(1))
-    model.add(Activation('sigmoid'))
+    model.add(Dense(8000, activation='relu', input_dim=8000))
+    model.add(Highway())
+    model.add(Dense(1, activation='sigmoid'))
 
     model.compile(
         loss='binary_crossentropy', optimizer='rmsprop', class_mode='binary')
@@ -144,10 +125,10 @@ def main(*args, **kwargs):
         global DATA_ROOT
         CUR_LEVEL = 'level_' + str(level) + '/'
         NEXT_LEVEL = 'level_' + str(level + 1) + '/'
-        DATA_ROOT = 'data/cnn/' + CUR_LEVEL
+        DATA_ROOT = 'data/fofe/' + CUR_LEVEL
     print 'Starting binary classification for ' + parent_id + '-' + go_id
-    labels, data = load_data(parent_id, go_id)
-    report = model(labels, data, parent_id, go_id)
+    df = load_data(parent_id, go_id)
+    report = model(df, parent_id, go_id)
     print report
     print_report(report, parent_id, go_id)
 

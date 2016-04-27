@@ -5,9 +5,11 @@ from utils import (
     shuffle, train_val_test_split, get_gene_ontology)
 import sys
 import os
+import random
+import pandas as pd
 
 LAMBDA = 24
-DATA_ROOT = 'data/cnn/'
+DATA_ROOT = 'data/fofe/'
 CUR_LEVEL = 'level_1/'
 NEXT_LEVEL = 'level_2/'
 
@@ -41,15 +43,8 @@ def get_subtree_set(go_id):
 
 
 def load_data(parent_id, go_id):
-    data = dict()
-    with open(DATA_ROOT + NEXT_LEVEL + 'data/' + go_id + '.txt') as f:
-        for line in f:
-            line = line.strip().split('\t')
-            prot_id = line[0]
-            seq = line[1]
-            gos = line[2].split(', ')
-            data[prot_id] = (seq, gos)
-    return data
+    df = pd.read_pickle(DATA_ROOT + NEXT_LEVEL + 'data/' + go_id + '.pkl')
+    return df
 
 
 def main(*args, **kwargs):
@@ -63,37 +58,36 @@ def main(*args, **kwargs):
         global NEXT_LEVEL
         CUR_LEVEL = 'level_' + str(level) + '/'
         NEXT_LEVEL = 'level_' + str(level + 1) + '/'
-    data = load_data(parent_id, go_id)
+    df = load_data(parent_id, go_id)
     go_node = go[go_id]
     for ch_id in go_node['children']:
         ch_set = get_subtree_set(ch_id)
         positives = list()
         negatives = list()
-        for prot_id in data:
-            seq, gos = data[prot_id]
+        for i in df.index:
             pos = False
-            for g_id in gos:
+            for g_id in df['gos'][i]:
                 if g_id in ch_set:
                     pos = True
                     break
             if pos:
-                positives.append((prot_id, seq))
+                positives.append(i)
             else:
-                negatives.append((prot_id, seq))
+                negatives.append(i)
         n = min(len(positives), len(negatives))
         if n > 0:
             shuffle(positives)
             shuffle(negatives)
             positives = positives[:n]
             negatives = negatives[:n]
-            filename = DATA_ROOT + NEXT_LEVEL + go_id + '/' + ch_id + '.txt'
+            filename = DATA_ROOT + NEXT_LEVEL + go_id + '/' + ch_id + '.pkl'
             if not os.path.exists(os.path.dirname(filename)):
                 os.makedirs(os.path.dirname(filename))
-            with open(filename, 'w') as f:
-                for prot_id, seq in negatives:
-                    f.write('0 ' + prot_id + ' ' + seq + '\n')
-                for prot_id, seq in positives:
-                    f.write('1 ' + prot_id + ' ' + seq + '\n')
+            labels = [0] * n + [1] * n
+            index = negatives + positives
+            new_df = df.reindex(index)
+            new_df['labels'] = pd.Series(labels, index=new_df.index)
+            new_df.to_pickle(filename)
 
 
 if __name__ == '__main__':

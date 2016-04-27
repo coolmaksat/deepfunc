@@ -3,11 +3,10 @@ import sys
 from collections import deque
 import time
 from utils import shuffle, get_gene_ontology
-import numpy
-import pandas as pd
 
-DATA_ROOT = 'data/fofe/'
-RESULT_ROOT = 'data/fofe/level_1/GO:0003674/'
+
+DATA_ROOT = 'data/cnn/'
+RESULT_ROOT = 'data/cnn/level_1/GO:0003674/'
 FILES = (
     'train.txt',)
 
@@ -15,7 +14,6 @@ go = get_gene_ontology()
 
 go_prot = None
 go_seq = None
-fofe = None
 MIN_LEN = 24
 
 
@@ -73,17 +71,14 @@ def load_all_proteins():
     data = list()
     global go_seq
     go_seq = dict()
-    max_len = 0
-    sum_len = 0
     for i in range(len(FILES)):
         file_name = FILES[i]
         with open(DATA_ROOT + file_name, 'r') as f:
-            prot_id = 0
             for line in f:
                 line = line.strip().split('\t')
-                if max_len < len(line[1]):
-                    max_len = len(line[1])
-                sum_len += len(line[1])
+                if len(line[1]) < MIN_LEN:
+                    continue
+                prot_id = line[0]
                 seq = line[1]
                 go_seq[prot_id] = seq
                 go_set = set()
@@ -91,13 +86,7 @@ def load_all_proteins():
                     if go_id in go:
                         go_set.add(go_id)
                 data.append((prot_id, go_set))
-                prot_id += 1
     return data
-
-
-def get_fofe_by_prot_id():
-    df = pd.read_pickle(DATA_ROOT + 'train.pkl')
-    return df['data']
 
 
 def get_proteins_by_go_id(data):
@@ -110,46 +99,38 @@ def get_proteins_by_go_id(data):
     return res
 
 
-def select_proteins(go_id, parent_go_set):
+def select_proteins(go_id):
     node = go[go_id]
-    pos_go_set = get_subtree_set(go_id)
-    neg_go_set = parent_go_set - pos_go_set
-    positives = set()
-    for g_id in pos_go_set:
-        if g_id in go_prot:
-            positives |= go_prot[g_id]
-    negatives = set()
-    for g_id in neg_go_set:
-        if g_id in go_prot:
-            negatives |= go_prot[g_id]
-    negatives = negatives - positives
-    positives = list(positives)
-    negatives = list(negatives)
-    shuffle(positives)
-    shuffle(negatives)
-    min_len = min(len(positives), len(negatives))
-    # with open(RESULT_ROOT + go_id + '.txt', 'w') as f:
-    labels = list()
-    proteins = list()
-    data = list()
-    for prot_id in negatives[:min_len]:
-        labels.append(0)
-        proteins.append(prot_id)
-        data.append(fofe[prot_id])
-    for prot_id in positives[:min_len]:
-        labels.append(1)
-        proteins.append(prot_id)
-        data.append(fofe[prot_id])
-    df = pd.DataFrame({'labels': labels, 'proteins': proteins, 'data': data})
-    df.to_pickle(RESULT_ROOT + go_id + '.pkl')
-    # numpy.savez(
-    #     RESULT_ROOT + go_id + '.npz',
-    #     labels=numpy.array(labels),
-    #     proteins=numpy.array(proteins),
-    #     data=numpy.array(data))
-    print 'Finished selection for ' + go_id
-    # for ch_id in node['children']:
-    #     select_proteins(ch_id, pos_go_set)
+
+    with open(RESULT_ROOT + go_id + '.txt', 'w') as f:
+        children = list()
+        prot_set = set()
+        ch_prots = dict()
+        for i in range(len(node['children'])):
+            ch_id = node['children'][i]
+            ch_prots[ch_id] = set()
+            ch_go_set = get_subtree_set(ch_id)
+            for g_id in ch_go_set:
+                if g_id in go_prot:
+                    ch_prots[ch_id] |= go_prot[g_id]
+            if len(ch_prots[ch_id]) > 199:
+                children.append(ch_id)
+                prot_set |= ch_prots[ch_id]
+        ch_ind = dict()
+        for i in range(len(children)):
+            ch_ind[children[i]] = i
+        for prot_id in prot_set:
+            f.write(prot_id + '\t' + go_seq[prot_id] + '\t')
+            labels = list()
+            for g_id, prots in ch_prots.iteritems():
+                if prot_id in prots:
+                    if g_id in ch_ind:
+                        labels.append(ch_ind[g_id])
+            if labels:
+                f.write(str(labels[0]))
+                for l in labels[1:]:
+                    f.write('|' + str(l))
+                f.write('\n')
 
 
 def main():
@@ -159,17 +140,9 @@ def main():
     global go_prot
     print 'Getting proteins by go_id'
     go_prot = get_proteins_by_go_id(data)
-    global fofe
-    print 'Loading fofes'
-    fofe = get_fofe_by_prot_id()
     root_go_id = 'GO:0003674'
-    root = go[root_go_id]
-    root_go_set = get_subtree_set(root_go_id)
     print 'Starting protein selection'
-    for ch_id in root['children']:
-        print ch_id
-        select_proteins(ch_id, root_go_set)
-
+    select_proteins(root_go_id)
     end_time = time.time() - start_time
     print 'Done in %d seconds' % (end_time, )
 

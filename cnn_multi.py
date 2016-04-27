@@ -17,7 +17,7 @@ from keras.callbacks import ModelCheckpoint, EarlyStopping
 
 from utils import (
     train_test_split, normalize_aa,
-    shuffle, encode_seq_one_hot, encode_seq, encode_seq_hydro
+    shuffle, encode_seq_one_hot, encode_seq
 )
 import os
 import sys
@@ -34,37 +34,45 @@ DATA_ROOT = 'data/cnn/'
 CUR_LEVEL = 'level_1/'
 NEXT_LEVEL = 'level_2/'
 DATA_ROOT += CUR_LEVEL
+nb_classes = 0
 
 
 def load_data(parent_id, go_id):
     data = list()
     labels = list()
-    positive = list()
-    negative = list()
+    global nb_classes
     with open(DATA_ROOT + parent_id + '/' + go_id + '.txt') as f:
         for line in f:
-            line = line.strip().split(' ')
-            label = int(line[0])
-            seq = line[2][:MAXLEN]
-            if label == 1:
-                labels.append(1)
-                positive.append(seq)
-            else:
-                labels.append(0)
-                negative.append(seq)
-    shuffle(negative, seed=0)
-    n = len(positive)
-    negative = negative[:n]
-    n = len(positive)
-    labels = [0] * len(negative) + [1] * len(positive)
-    data = negative + positive
+            line = line.strip().split('\t')
+            seq = line[1][:MAXLEN]
+            labs = line[2].split('|')
+            data.append(seq)
+            for i in range(len(labs)):
+                labs[i] = int(labs[i])
+                nb_classes = max(nb_classes, labs[i])
+            labels.append(labs)
+    nb_classes += 1
+    for i in range(len(labels)):
+        l = [0] * nb_classes
+        for x in labels[i]:
+            l[x] = 1
+        labels[i] = l
     for i in range(len(data)):
         data[i] = encode_seq_one_hot(data[i], maxlen=MAXLEN)
     shuffle(data, labels, seed=0)
-    return numpy.array(labels), numpy.array(data, dtype='float32')
+    return numpy.array(
+        labels, dtype='float32'), numpy.array(data, dtype='float32')
 
 
 def model(labels, data, parent_id, go_id):
+    # Convolution
+    filter_length = 20
+    nb_filter = 32
+    pool_length = 10
+    global nb_classes
+
+    # LSTM
+    lstm_output_size = 128
 
     # Training
     batch_size = 64
@@ -73,9 +81,8 @@ def model(labels, data, parent_id, go_id):
     train, test = train_test_split(
         labels, data, batch_size=batch_size)
     train_label, train_data = train
-
-    if len(train_data) < 100:
-        raise Exception("No training data for " + go_id)
+    # sample_weight = [1.0 if y == 1 else 1.0 for y in train_label]
+    # sample_wseight = numpy.array(sample_weight, dtype='float32')
 
     test_label, test_data = test
     test_label_rep = test_label
@@ -83,33 +90,39 @@ def model(labels, data, parent_id, go_id):
     model = Sequential()
     model.add(Convolution1D(input_dim=20,
                             input_length=MAXLEN,
-                            nb_filter=320,
-                            filter_length=20,
+                            nb_filter=nb_filter,
+                            filter_length=filter_length,
                             border_mode='valid',
                             activation='relu',
                             subsample_length=1))
-    model.add(MaxPooling1D(pool_length=10, stride=10))
+    model.add(MaxPooling1D(pool_length=pool_length, stride=10))
     model.add(Dropout(0.25))
-    model.add(Convolution1D(nb_filter=32,
-                            filter_length=32,
+    model.add(Convolution1D(nb_filter=nb_filter,
+                            filter_length=filter_length,
                             border_mode='valid',
                             activation='relu',
                             subsample_length=1))
-    model.add(MaxPooling1D(pool_length=8))
-    model.add(LSTM(128))
+    model.add(MaxPooling1D(pool_length=pool_length, stride=10))
+    model.add(LSTM(lstm_output_size))
+    # model.add(Flatten())
     model.add(Dense(1024))
     model.add(Activation('relu'))
     model.add(Dropout(0.5))
-    model.add(Dense(1))
-    model.add(Activation('sigmoid'))
+    model.add(Dense(nb_classes))
+    model.add(Activation('softmax'))
 
     model.compile(
-        loss='binary_crossentropy', optimizer='rmsprop', class_mode='binary')
+        loss='categorical_crossentropy',
+        optimizer='rmsprop')
 
     model_path = DATA_ROOT + parent_id + '/' + go_id + '.hdf5'
+    # parent_model_path = DATA_ROOT + 'data/' + parent_id + '.hdf5'
+    # if os.path.exists(parent_model_path):
+    #     print 'Loading parent model weights'
+    #     model.load_weights(parent_model_path)
     checkpointer = ModelCheckpoint(
         filepath=model_path, verbose=1, save_best_only=True)
-    earlystopper = EarlyStopping(monitor='val_loss', patience=7, verbose=1)
+    earlystopper = EarlyStopping(monitor='val_loss', patience=10, verbose=1)
 
     model.fit(
         X=train_data, y=train_label,
@@ -120,10 +133,15 @@ def model(labels, data, parent_id, go_id):
 
     # Loading saved weights
     print 'Loading weights'
-    model.load_weights(model_path)
-    pred_data = model.predict_classes(
-        test_data, batch_size=batch_size)
-    return classification_report(list(test_label_rep), pred_data)
+    model.load_weights(DATA_ROOT + parent_id + '/' + go_id + '.hdf5')
+    score = model.evaluate(
+        test_data, test_label, show_accuracy=True, verbose=1)
+    print 'Score: ', score[0]
+    print 'Accuracy: ', score[1]
+    # pred_data = model.predict_classes(
+    #     test_data, batch_size=batch_size)
+
+    # return classification_report(list(test_label_rep), pred_data)
 
 
 def print_report(report, parent_id, go_id):
