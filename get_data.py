@@ -7,11 +7,11 @@ from utils import get_gene_ontology
 from collections import deque
 
 
-DATA_ROOT = 'data/yeast/'
+DATA_ROOT = 'data/fofe/'
 FILENAME = 'train.txt'
 
 
-go = get_gene_ontology('goslim_yeast.obo')
+go = get_gene_ontology('go.obo')
 
 
 def get_go_set(go_id):
