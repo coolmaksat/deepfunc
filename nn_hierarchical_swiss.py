@@ -24,7 +24,7 @@ from collections import deque
 
 DATA_ROOT = 'data/yeast/'
 MAXLEN = 500
-go = get_gene_ontology('goslim_yeast.obo')
+go = get_gene_ontology('go.obo')
 
 
 def get_go_set(go_id):
@@ -94,7 +94,7 @@ def compute_accuracy(predictions, labels):
 
 
 def get_feature_model():
-    embedding_dims = 128
+    embedding_dims = 20
     max_features = 20
     model = Sequential()
     model.add(Embedding(
@@ -103,12 +103,12 @@ def get_feature_model():
         input_length=MAXLEN,
         dropout=0.2))
     model.add(Convolution1D(
-        nb_filter=64,
-        filter_length=16,
+        nb_filter=128,
+        filter_length=8,
         border_mode='valid',
         activation='relu',
         subsample_length=1))
-    model.add(MaxPooling1D(pool_length=8))
+    model.add(MaxPooling1D(pool_length=4))
     model.add(Flatten())
     return model
 
@@ -162,7 +162,7 @@ def model():
     model_path = DATA_ROOT + 'hierarchical.hdf5'
     checkpointer = ModelCheckpoint(
         filepath=model_path, verbose=1, save_best_only=True)
-    earlystopper = EarlyStopping(monitor='val_loss', patience=10, verbose=1)
+    earlystopper = EarlyStopping(monitor='val_loss', patience=20, verbose=1)
     output = {}
     for i in range(len(functions)):
         output[functions[i]] = np.array(train_labels[i])
@@ -179,13 +179,39 @@ def model():
     output_test = {}
     for i in range(len(functions)):
         output_test[functions[i]] = np.array(test_labels[i])
-    score = model.evaluate({'input': test_data}, output_test)
-    predictions = model.predict(test_data, batch_size=batch_size, verbose=1)
+    score = model.evaluate(
+        {'input': test_data}, output_test, batch_size=batch_size)
+    predictions = model.predict(
+        test_data, batch_size=batch_size, verbose=1)
+
+    prot_res = list()
+    for i in range(len(test_data)):
+        prot_res.append({'tp': 0.0, 'fp': 0.0, 'fn': 0.0})
     for i in range(len(test_labels)):
         pred = np.round(predictions[i].flatten())
         test = test_labels[i]
+        for j in range(len(pred)):
+            if pred[j] == 1 and test[j] == 1:
+                prot_res[j]['tp'] += 1
+            elif pred[j] == 1 and test[j] == 0:
+                prot_res[j]['fp'] += 1
+            elif pred[j] == 0 and test[j] == 1:
+                prot_res[j]['fn'] += 1
         print functions[i]
         print classification_report(test, pred)
+    f = 0.0
+    n = 0
+    for prot in prot_res:
+        tp = prot['tp']
+        fp = prot['fp']
+        fn = prot['fn']
+        if tp + fn > 0 and tp + fp > 0:
+            recall = tp / (1.0 * (tp + fn))
+            precision = tp / (1.0 * (tp + fp))
+            if recall + precision != 0:
+                f += 2 * precision * recall / (precision + recall)
+            n += 1
+    print 'Protein centric F measure: \t', f / n
     print 'Test loss:\t', score[0]
     print 'Test accuracy:\t', score[1]
 

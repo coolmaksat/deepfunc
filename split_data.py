@@ -7,9 +7,9 @@ from utils import shuffle, get_gene_ontology
 
 
 DATA_ROOT = 'data/'
-RESULT_ROOT = 'data/yeast/'
+RESULT_ROOT = 'data/swiss/'
 FILES = (
-    'uniprot-swiss-mol-func-yeast.txt',)
+    'uniprot-swiss-mol-func.txt',)
 
 
 def load_all_proteins_paac():
